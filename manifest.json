@@ -1,0 +1,22 @@
+{
+  "name": "Forge Master Optimizer",
+  "short_name": "FM Optimizer",
+  "description": "Mobile & Desktop Gear, Pet & Mount Optimizer for Forge Master",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#121217",
+  "theme_color": "#181820",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#181820">
+  <title>Forge Master Optimizer (Web & Mobile)</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+</head>
+<body>
+
+  <!-- Sticky Header & Live Combat Stats -->
+  <header class="app-header">
+    <div class="header-top">
+      <div class="app-title">⚡ FM OPTIMIZER</div>
+      <div class="header-actions">
+        <button id="btn-import-export" class="btn-header" title="Import or Export JSON">💾 JSON</button>
+        <button id="btn-open-info" class="btn-header btn-info" title="System Manual">ℹ️ INFO</button>
+        <button id="btn-open-notes" class="btn-header btn-notes" title="Patch Notes">📜 NOTES</button>
+      </div>
+    </div>
+
+    <div class="stats-banner">
+      <div class="stat-box stat-box-large">
+        <span id="lbl-dps" class="stat-dps">REAL DPS: 0.0</span>
+      </div>
+      <div class="stat-box">
+        <span id="lbl-hps" class="stat-hps">REAL HPS: 0.0</span>
+      </div>
+      <div class="stat-box">
+        <span id="lbl-mult" class="stat-mult">EFF. MULT: 0.0x</span>
+      </div>
+      <div class="stat-match" id="lbl-match">OPTIMAL BUILD MATCH: 0.0%</div>
+      <div class="stat-sub" id="lbl-base-summary">BASE DMG: 0 | TOTAL HP: 0</div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+    
+    <!-- Error Notifications -->
+    <div id="error-logs" class="hidden"></div>
+
+    <!-- Build & Fairy Setup -->
+    <section class="config-bar">
+      <div class="field-group">
+        <label for="select-target-build">Target Build</label>
+        <select id="select-target-build"></select>
+      </div>
+      <div class="field-group">
+        <label for="inp-fairy-lvl">Fairy Lvl (% CC / 15% SD)</label>
+        <input type="number" id="inp-fairy-lvl" step="0.5" min="0" max="100">
+      </div>
+    </section>
+
+    <!-- Forge Items (Slots 1 to 8) -->
+    <section>
+      <div class="section-header">
+        <span class="section-title">FORGE ITEMS (EQUIPMENT)</span>
+      </div>
+      <div class="slots-grid">
+        <div class="slot-btn" id="slot-btn-0"></div>
+        <div class="slot-btn" id="slot-btn-1"></div>
+        <div class="slot-btn" id="slot-btn-2"></div>
+        <div class="slot-btn" id="slot-btn-3"></div>
+        <div class="slot-btn" id="slot-btn-4"></div>
+        <div class="slot-btn" id="slot-btn-5"></div>
+        <div class="slot-btn" id="slot-btn-6"></div>
+        <div class="slot-btn" id="slot-btn-7"></div>
+      </div>
+    </section>
+
+    <!-- Mount & Pets (Slots 9 to 12) -->
+    <section>
+      <div class="section-header">
+        <span class="section-title">MOUNT & PETS</span>
+        <button id="btn-open-storage" class="btn-purple">⚡ STORAGE OPTIMIZER</button>
+      </div>
+      <div class="slots-grid">
+        <div class="slot-btn" id="slot-btn-8"></div>
+        <div class="slot-btn" id="slot-btn-9"></div>
+        <div class="slot-btn" id="slot-btn-10"></div>
+        <div class="slot-btn" id="slot-btn-11"></div>
+      </div>
+    </section>
+
+    <!-- Saturation Monitor -->
+    <section class="sat-container">
+      <div class="section-title" style="margin-bottom: 8px;">SATURATION MONITOR</div>
+      
+      <div class="sat-row">
+        <span class="sat-label">Melee DMG</span>
+        <div class="progress-track"><div id="pb-fill-md" class="progress-fill"></div></div>
+        <span id="pb-lbl-md" class="sat-value">0.0%</span>
+      </div>
+
+      <div class="sat-row">
+        <span class="sat-label">Ranged DMG</span>
+        <div class="progress-track"><div id="pb-fill-rd" class="progress-fill"></div></div>
+        <span id="pb-lbl-rd" class="sat-value">0.0%</span>
+      </div>
+
+      <div class="sat-row">
+        <span class="sat-label">Attack Speed</span>
+        <div class="progress-track"><div id="pb-fill-as" class="progress-fill"></div></div>
+        <span id="pb-lbl-as" class="sat-value">0.0%</span>
+      </div>
+
+      <div class="sat-row">
+        <span class="sat-label">Double Chance</span>
+        <div class="progress-track"><div id="pb-fill-dc" class="progress-fill"></div></div>
+        <span id="pb-lbl-dc" class="sat-value">0.0%</span>
+      </div>
+
+      <div class="sat-row">
+        <span class="sat-label">Lifesteal</span>
+        <div class="progress-track"><div id="pb-fill-ls" class="progress-fill"></div></div>
+        <span id="pb-lbl-ls" class="sat-value">0.0%</span>
+      </div>
+
+      <div class="sat-row">
+        <span class="sat-label">Skill Damage</span>
+        <div class="progress-track"><div id="pb-fill-sd" class="progress-fill"></div></div>
+        <span id="pb-lbl-sd" class="sat-value">0.0%</span>
+      </div>
+
+      <div class="sat-row">
+        <span class="sat-label">Crit Chance</span>
+        <div class="progress-track"><div id="pb-fill-cc" class="progress-fill"></div></div>
+        <span id="pb-lbl-cc" class="sat-value">0.0%</span>
+      </div>
+    </section>
+
+    <!-- Auxiliary Timing & Hit Data -->
+    <div class="aux-card">
+      <span id="lbl-time-per-hit">TIME PER HIT: 0.0s</span>
+      <span id="lbl-crit-dmg">CRIT DMG: 0.0% -> 1.2x</span>
+    </div>
+
+  </main>
+
+  <!-- ================= MODALS ================= -->
+
+  <!-- 1. Item Calibration Modal -->
+  <div id="calibration-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title" id="calib-modal-title">Item Calibration</div>
+        <button class="btn-close btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Weapon Toggle -->
+        <div id="calib-weapon-toggle" class="weapon-toggle-group hidden">
+          <button id="btn-wp-m" class="btn-toggle">⚔️ MELEE</button>
+          <button id="btn-wp-r" class="btn-toggle">🏹 RANGED</button>
+        </div>
+
+        <!-- Rarity Picker -->
+        <div id="calib-rarity-select-group" class="field-group hidden">
+          <label>Rarity Tier</label>
+          <select id="calib-rarity-select">
+            <option value="Common">Common [Grey]</option>
+            <option value="Rare">Rare [Blue]</option>
+            <option value="Epic">Epic [Green]</option>
+            <option value="Legendary">Legendary [Yellow]</option>
+            <option value="Ultimate">Ultimate [Red]</option>
+            <option value="Mythic">Mythic [Purple]</option>
+          </select>
+        </div>
+
+        <!-- Flat HP and DMG (supports k/m) -->
+        <div class="inputs-grid-2">
+          <div class="field-group">
+            <label>Flat HP (h) [e.g. 20k, 1.8m]</label>
+            <input type="text" id="inp-calib-h" class="calib-input" placeholder="0">
+          </div>
+          <div class="field-group">
+            <label>Flat DMG (d) [e.g. 20k, 1.3m]</label>
+            <input type="text" id="inp-calib-d" class="calib-input" placeholder="0">
+          </div>
+        </div>
+
+        <!-- Percent Sub-Stats -->
+        <div class="inputs-grid-3">
+          <div class="field-group"><label>Crit Chance (cc)</label><input type="number" step="0.1" id="inp-calib-cc" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Crit DMG (cd)</label><input type="number" step="0.1" id="inp-calib-cd" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Attack Speed (as)</label><input type="number" step="0.1" id="inp-calib-as" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Melee DMG (md)</label><input type="number" step="0.1" id="inp-calib-md" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Ranged DMG (rd)</label><input type="number" step="0.1" id="inp-calib-rd" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Damage % (dmg)</label><input type="number" step="0.1" id="inp-calib-dmg" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Skill DMG (sd)</label><input type="number" step="0.1" id="inp-calib-sd" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Double Chance (dc)</label><input type="number" step="0.1" id="inp-calib-dc" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Lifesteal (ls)</label><input type="number" step="0.1" id="inp-calib-ls" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Block Chance (bc)</label><input type="number" step="0.1" id="inp-calib-bc" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>HP Regen (hr)</label><input type="number" step="0.1" id="inp-calib-hr" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Skill CD (scd)</label><input type="number" step="0.1" id="inp-calib-scd" class="calib-input" placeholder="0"></div>
+          <div class="field-group"><label>Health % (hp)</label><input type="number" step="0.1" id="inp-calib-hp" class="calib-input" placeholder="0"></div>
+        </div>
+
+        <div id="sim-swap-result"></div>
+
+      </div>
+      <div class="modal-footer">
+        <button id="btn-sim-swap" class="btn-sim">🔍 Simulate Swap</button>
+        <button id="btn-save-calib" class="btn-primary">💾 Save to Build</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Storage Optimizer Modal -->
+  <div id="storage-modal" class="modal-overlay hidden">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <div class="modal-title">Mount & Pet Storage Optimizer</div>
+        <button class="btn-close btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Mounts Section -->
+        <div>
+          <div class="header-top">
+            <span class="section-title">MOUNTS STORAGE</span>
+            <button id="btn-add-mount" class="btn-header">+ Add Mount</button>
+          </div>
+          <div id="mount-storage-list" class="storage-scroll-box"></div>
+        </div>
+
+        <!-- Pets Section -->
+        <div>
+          <div class="header-top">
+            <span class="section-title">PETS STORAGE</span>
+            <button id="btn-add-pet" class="btn-header">+ Add Pet</button>
+          </div>
+          <div id="pet-storage-list" class="storage-scroll-box"></div>
+        </div>
+
+        <!-- Optimizer Output & Actions -->
+        <div id="opti-result-lbl" style="background:#121217; padding:12px; border-radius:8px; border:1px solid #2c3e50; text-align:center;">
+          Ready to simulate all combinations of 1 Mount & 3 Pets.
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button id="btn-run-opti" class="btn-purple" style="padding:10px 18px; font-size:0.9rem;">⚡ RUN OPTIMIZER</button>
+        <button id="btn-apply-opti" class="btn-primary" disabled>Apply to Build</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Add/Edit Storage Item Modal -->
+  <div id="storage-item-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title" id="storage-item-modal-title">Item Form</div>
+        <button class="btn-close btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field-group">
+          <label>Rarity Tier</label>
+          <select id="storage-rarity-select">
+            <option value="Common">Common [Grey]</option>
+            <option value="Rare">Rare [Blue]</option>
+            <option value="Epic">Epic [Green]</option>
+            <option value="Legendary">Legendary [Yellow]</option>
+            <option value="Ultimate">Ultimate [Red]</option>
+            <option value="Mythic">Mythic [Purple]</option>
+          </select>
+        </div>
+
+        <div class="inputs-grid-2">
+          <div class="field-group">
+            <label>Flat HP (h) [e.g. 20k, 1.8m]</label>
+            <input type="text" id="inp-storage-h" class="storage-input" placeholder="0">
+          </div>
+          <div class="field-group">
+            <label>Flat DMG (d) [e.g. 20k, 1.3m]</label>
+            <input type="text" id="inp-storage-d" class="storage-input" placeholder="0">
+          </div>
+        </div>
+
+        <div class="inputs-grid-3">
+          <div class="field-group"><label>Crit Chance (cc)</label><input type="number" step="0.1" id="inp-storage-cc" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Crit DMG (cd)</label><input type="number" step="0.1" id="inp-storage-cd" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Attack Speed (as)</label><input type="number" step="0.1" id="inp-storage-as" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Melee DMG (md)</label><input type="number" step="0.1" id="inp-storage-md" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Ranged DMG (rd)</label><input type="number" step="0.1" id="inp-storage-rd" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Damage % (dmg)</label><input type="number" step="0.1" id="inp-storage-dmg" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Skill DMG (sd)</label><input type="number" step="0.1" id="inp-storage-sd" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Double Chance (dc)</label><input type="number" step="0.1" id="inp-storage-dc" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Lifesteal (ls)</label><input type="number" step="0.1" id="inp-storage-ls" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Block Chance (bc)</label><input type="number" step="0.1" id="inp-storage-bc" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>HP Regen (hr)</label><input type="number" step="0.1" id="inp-storage-hr" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Skill CD (scd)</label><input type="number" step="0.1" id="inp-storage-scd" class="storage-input" placeholder="0"></div>
+          <div class="field-group"><label>Health % (hp)</label><input type="number" step="0.1" id="inp-storage-hp" class="storage-input" placeholder="0"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-save-storage-item" class="btn-primary">Save Item</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Import / Export JSON Modal -->
+  <div id="import-export-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">Sync, Backup & Share JSON</div>
+        <button class="btn-close btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:0.85rem; color:#bdc3c7;">
+          You can copy your build to share it with clan members, or paste your <code>forge_master_build.json</code> here. Legacy files without x1000 multiplier are automatically upgraded!
+        </p>
+        <textarea id="json-area" style="height: 180px; font-family: monospace; font-size: 0.8rem;"></textarea>
+      </div>
+      <div class="modal-footer" style="flex-wrap: wrap;">
+        <button id="btn-json-copy" class="btn-secondary">📋 Copy</button>
+        <button id="btn-json-download" class="btn-secondary">⬇️ Download .json</button>
+        <button id="btn-json-import" class="btn-primary">📥 Import JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. System Manual / Info Modal -->
+  <div id="info-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">System Information & Mechanics</div>
+        <button class="btn-close btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body" style="font-size: 0.85rem; line-height: 1.5; color: #ecf0f1;">
+        <h4 style="color:#f1c40f;">Attack Speed Breakpoints</h4>
+        <p>Attack Speed does NOT scale smoothly. It snaps to rigid animation intervals:</p>
+        <p style="font-family:monospace; background:#121217; padding:8px; border-radius:6px; margin:6px 0;">
+          +11.2% -> 1.0s | +25.1% -> 0.9s | +42.9% -> 0.8s<br>
+          +66.7% -> 0.7s | +100.1% -> 0.6s | +150.1% -> 0.5s<br>
+          <b>+203.0% -> 0.4s</b> | +233.4% -> 0.35s | +400.1% -> 0.3s
+        </p>
+
+        <h4 style="color:#3498db; margin-top:10px;">Metric Inputs (k & m)</h4>
+        <p>Base Flat HP and Flat DMG input fields support raw true numbers and metric abbreviations (e.g. <code>20k</code> = 20,000, <code>1.3m</code> = 1,300,000).</p>
+
+        <h4 style="color:#2ecc71; margin-top:10px;">Fairy Mira (Crit Fairy)</h4>
+        <p>Every 15% Skill Damage (SD) grants 1 Fairy Block. Each block converts to Crit Chance based on your Fairy Level (capped at 80% bonus CC).</p>
+
+        <h4 style="color:#9b59b6; margin-top:10px;">Storage Optimizer</h4>
+        <p>Tests all combinations of 1 Mount and 3 Pets against your current armor, enforcing the 30% Lifesteal constraint and finding the optimal all-around build.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary btn-close-modal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Patch Notes Modal -->
+  <div id="notes-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">Update Highlights</div>
+        <button class="btn-close btn-close-modal">✕</button>
+      </div>
+      <div class="modal-body" style="font-size: 0.85rem; line-height: 1.5; color: #ecf0f1;">
+        <h4 style="color:#e67e22;">Mobile & Web Edition Release:</h4>
+        <ul style="padding-left: 20px; margin-top: 4px;">
+          <li>Full mobile PWA compatibility: add to home screen on iOS and Android for a native app feel!</li>
+          <li>Works 100% offline via Service Worker.</li>
+          <li>Full synchronisation with PC build files via Import/Export JSON.</li>
+          <li>Includes newly discovered +203.0% Attack Speed breakpoint (0.4s interval).</li>
+          <li>Supports metric 'k' and 'm' inputs without manual zeroes.</li>
+          <li>All-around storage optimization algorithm prioritizing raw DPS and sustain.</li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary btn-close-modal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
