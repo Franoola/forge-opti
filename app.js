@@ -1158,6 +1158,25 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-json-download').addEventListener('click', downloadJsonFile);
   document.getElementById('btn-json-copy').addEventListener('click', copyJsonToClipboard);
 
+  const fileInput = document.getElementById('inp-json-file');
+  const browseBtn = document.getElementById('btn-browse-json');
+  const fileNameLbl = document.getElementById('lbl-file-name');
+
+  if (browseBtn && fileInput) {
+    browseBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        fileNameLbl.textContent = file.name;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          document.getElementById('json-area').value = evt.target.result;
+        };
+        reader.readAsText(file);
+      }
+    });
+  }
+
   document.getElementById('btn-open-info').addEventListener('click', () => {
     document.getElementById('info-modal').classList.remove('hidden');
   });
