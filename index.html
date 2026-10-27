@@ -13,134 +13,162 @@
 </head>
 <body>
 
-  <!-- Sticky Header & Live Combat Stats -->
+  <!-- Top Sticky Navigation & Header -->
   <header class="app-header">
-    <div class="header-top">
-      <div class="app-title">⚡ FM OPTIMIZER</div>
-      <div class="header-actions">
-        <button id="btn-import-export" class="btn-header" title="Import or Export JSON">💾 JSON</button>
-        <button id="btn-open-info" class="btn-header btn-info" title="System Manual">ℹ️ INFO</button>
-        <button id="btn-open-notes" class="btn-header btn-notes" title="Patch Notes">📜 NOTES</button>
+    <div class="header-container">
+      <div class="header-top">
+        <div class="app-title">⚡ FM OPTIMIZER</div>
+        <div class="header-actions">
+          <button id="btn-import-export" class="btn-header" title="Import or Export JSON">💾 JSON</button>
+          <button id="btn-open-info" class="btn-header btn-info" title="System Manual">ℹ️ INFO</button>
+          <button id="btn-open-notes" class="btn-header btn-notes" title="Patch Notes">📜 NOTES</button>
+        </div>
       </div>
-    </div>
 
-    <div class="stats-banner">
-      <div class="stat-box stat-box-large">
-        <span id="lbl-dps" class="stat-dps">REAL DPS: 0.0</span>
+      <!-- Mobile-only sticky live combat stats (hidden on desktop >= 1024px) -->
+      <div class="mobile-stats-banner">
+        <div class="mob-stat-dps" id="mob-lbl-dps">REAL DPS: 0.0</div>
+        <div class="mob-stat-row">
+          <span id="mob-lbl-hps" class="mob-stat-hps">HPS: 0.0</span>
+          <span id="mob-lbl-mult" class="mob-stat-mult">MULT: 0.0x</span>
+          <span id="mob-lbl-match" class="mob-stat-match">MATCH: 0%</span>
+        </div>
       </div>
-      <div class="stat-box">
-        <span id="lbl-hps" class="stat-hps">REAL HPS: 0.0</span>
-      </div>
-      <div class="stat-box">
-        <span id="lbl-mult" class="stat-mult">EFF. MULT: 0.0x</span>
-      </div>
-      <div class="stat-match" id="lbl-match">OPTIMAL BUILD MATCH: 0.0%</div>
-      <div class="stat-sub" id="lbl-base-summary">BASE DMG: 0 | TOTAL HP: 0</div>
     </div>
   </header>
 
   <!-- Main Container -->
-  <main class="container">
-    
-    <!-- Error Notifications -->
-    <div id="error-logs" class="hidden"></div>
-
-    <!-- Build & Fairy Setup -->
-    <section class="config-bar">
-      <div class="field-group">
-        <label for="select-target-build">Target Build</label>
-        <select id="select-target-build"></select>
-      </div>
-      <div class="field-group">
-        <label for="inp-fairy-lvl">Fairy Lvl (% CC / 15% SD)</label>
-        <input type="number" id="inp-fairy-lvl" step="0.5" min="0" max="100">
-      </div>
-    </section>
-
-    <!-- Forge Items (Slots 1 to 8) -->
-    <section>
-      <div class="section-header">
-        <span class="section-title">FORGE ITEMS (EQUIPMENT)</span>
-      </div>
-      <div class="slots-grid">
-        <div class="slot-btn" id="slot-btn-0"></div>
-        <div class="slot-btn" id="slot-btn-1"></div>
-        <div class="slot-btn" id="slot-btn-2"></div>
-        <div class="slot-btn" id="slot-btn-3"></div>
-        <div class="slot-btn" id="slot-btn-4"></div>
-        <div class="slot-btn" id="slot-btn-5"></div>
-        <div class="slot-btn" id="slot-btn-6"></div>
-        <div class="slot-btn" id="slot-btn-7"></div>
-      </div>
-    </section>
-
-    <!-- Mount & Pets (Slots 9 to 12) -->
-    <section>
-      <div class="section-header">
-        <span class="section-title">MOUNT & PETS</span>
-        <button id="btn-open-storage" class="btn-purple">⚡ STORAGE OPTIMIZER</button>
-      </div>
-      <div class="slots-grid">
-        <div class="slot-btn" id="slot-btn-8"></div>
-        <div class="slot-btn" id="slot-btn-9"></div>
-        <div class="slot-btn" id="slot-btn-10"></div>
-        <div class="slot-btn" id="slot-btn-11"></div>
-      </div>
-    </section>
-
-    <!-- Saturation Monitor -->
-    <section class="sat-container">
-      <div class="section-title" style="margin-bottom: 8px;">SATURATION MONITOR</div>
+  <main class="main-container">
+    <div class="app-layout">
       
-      <div class="sat-row">
-        <span class="sat-label">Melee DMG</span>
-        <div class="progress-track"><div id="pb-fill-md" class="progress-fill"></div></div>
-        <span id="pb-lbl-md" class="sat-value">0.0%</span>
+      <!-- LEFT COLUMN: Gear Slots + Mount & Pets + Config -->
+      <div class="layout-left">
+        
+        <!-- Forge Items (Slots 1 to 8) -->
+        <section class="card-section">
+          <div class="section-header">
+            <span class="section-title">FORGE ITEMS (EQUIPMENT)</span>
+          </div>
+          <div class="slots-grid">
+            <div class="slot-btn" id="slot-btn-0"></div>
+            <div class="slot-btn" id="slot-btn-1"></div>
+            <div class="slot-btn" id="slot-btn-2"></div>
+            <div class="slot-btn" id="slot-btn-3"></div>
+            <div class="slot-btn" id="slot-btn-4"></div>
+            <div class="slot-btn" id="slot-btn-5"></div>
+            <div class="slot-btn" id="slot-btn-6"></div>
+            <div class="slot-btn" id="slot-btn-7"></div>
+          </div>
+        </section>
+
+        <!-- Mount & Pets (Slots 9 to 12) -->
+        <section class="card-section">
+          <div class="section-header">
+            <span class="section-title">MOUNT & PETS</span>
+            <button id="btn-open-storage" class="btn-purple">⚡ STORAGE OPTIMIZER</button>
+          </div>
+          <div class="slots-grid">
+            <div class="slot-btn" id="slot-btn-8"></div>
+            <div class="slot-btn" id="slot-btn-9"></div>
+            <div class="slot-btn" id="slot-btn-10"></div>
+            <div class="slot-btn" id="slot-btn-11"></div>
+          </div>
+        </section>
+
+        <!-- Configuration Bar (Target Build & Fairy) -->
+        <section class="config-bar">
+          <div class="field-group">
+            <label for="select-target-build">Target Build Benchmark</label>
+            <select id="select-target-build"></select>
+          </div>
+          <div class="field-group">
+            <label for="inp-fairy-lvl">Fairy Lvl (% CC / 15% SD)</label>
+            <input type="number" id="inp-fairy-lvl" step="0.5" min="0" max="100">
+          </div>
+        </section>
+
+        <!-- Error Notifications -->
+        <div id="error-logs" class="hidden"></div>
+
       </div>
 
-      <div class="sat-row">
-        <span class="sat-label">Ranged DMG</span>
-        <div class="progress-track"><div id="pb-fill-rd" class="progress-fill"></div></div>
-        <span id="pb-lbl-rd" class="sat-value">0.0%</span>
+      <!-- RIGHT COLUMN: Combat Metrics Card + Saturation Monitor -->
+      <div class="layout-right">
+        
+        <!-- Primary Combat Hero Card -->
+        <section class="hero-stats-card">
+          <div class="hero-dps" id="lbl-dps">REAL DPS: 0.0</div>
+          
+          <div class="hero-subgrid">
+            <div class="hero-sub-box">
+              <span class="hero-sub-label">REAL HPS</span>
+              <span class="hero-sub-val val-hps" id="lbl-hps">0.0</span>
+            </div>
+            <div class="hero-sub-box">
+              <span class="hero-sub-label">EFF. MULTIPLIER</span>
+              <span class="hero-sub-val val-mult" id="lbl-mult">0.0x</span>
+            </div>
+          </div>
+
+          <div class="hero-match-badge" id="lbl-match">OPTIMAL BUILD MATCH: 0.0%</div>
+          <div class="hero-base-stats" id="lbl-base-summary">BASE DMG: 0 | TOTAL HP: 0</div>
+
+          <div class="aux-line">
+            <span id="lbl-time-per-hit">TIME PER HIT: 0.0s</span>
+            <span id="lbl-crit-dmg">CRIT DMG: 0.0% -> 1.2x</span>
+          </div>
+        </section>
+
+        <!-- Saturation Monitor -->
+        <section class="sat-container">
+          <div class="section-title" style="margin-bottom: 10px;">SATURATION MONITOR</div>
+          
+          <div class="sat-row">
+            <span class="sat-label">Melee DMG</span>
+            <div class="progress-track"><div id="pb-fill-md" class="progress-fill"></div></div>
+            <span id="pb-lbl-md" class="sat-value">0.0%</span>
+          </div>
+
+          <div class="sat-row">
+            <span class="sat-label">Ranged DMG</span>
+            <div class="progress-track"><div id="pb-fill-rd" class="progress-fill"></div></div>
+            <span id="pb-lbl-rd" class="sat-value">0.0%</span>
+          </div>
+
+          <div class="sat-row">
+            <span class="sat-label">Attack Speed</span>
+            <div class="progress-track"><div id="pb-fill-as" class="progress-fill"></div></div>
+            <span id="pb-lbl-as" class="sat-value">0.0%</span>
+          </div>
+
+          <div class="sat-row">
+            <span class="sat-label">Double Chance</span>
+            <div class="progress-track"><div id="pb-fill-dc" class="progress-fill"></div></div>
+            <span id="pb-lbl-dc" class="sat-value">0.0%</span>
+          </div>
+
+          <div class="sat-row">
+            <span class="sat-label">Lifesteal</span>
+            <div class="progress-track"><div id="pb-fill-ls" class="progress-fill"></div></div>
+            <span id="pb-lbl-ls" class="sat-value">0.0%</span>
+          </div>
+
+          <div class="sat-row">
+            <span class="sat-label">Skill Damage</span>
+            <div class="progress-track"><div id="pb-fill-sd" class="progress-fill"></div></div>
+            <span id="pb-lbl-sd" class="sat-value">0.0%</span>
+          </div>
+
+          <div class="sat-row">
+            <span class="sat-label">Crit Chance</span>
+            <div class="progress-track"><div id="pb-fill-cc" class="progress-fill"></div></div>
+            <span id="pb-lbl-cc" class="sat-value">0.0%</span>
+          </div>
+        </section>
+
       </div>
 
-      <div class="sat-row">
-        <span class="sat-label">Attack Speed</span>
-        <div class="progress-track"><div id="pb-fill-as" class="progress-fill"></div></div>
-        <span id="pb-lbl-as" class="sat-value">0.0%</span>
-      </div>
-
-      <div class="sat-row">
-        <span class="sat-label">Double Chance</span>
-        <div class="progress-track"><div id="pb-fill-dc" class="progress-fill"></div></div>
-        <span id="pb-lbl-dc" class="sat-value">0.0%</span>
-      </div>
-
-      <div class="sat-row">
-        <span class="sat-label">Lifesteal</span>
-        <div class="progress-track"><div id="pb-fill-ls" class="progress-fill"></div></div>
-        <span id="pb-lbl-ls" class="sat-value">0.0%</span>
-      </div>
-
-      <div class="sat-row">
-        <span class="sat-label">Skill Damage</span>
-        <div class="progress-track"><div id="pb-fill-sd" class="progress-fill"></div></div>
-        <span id="pb-lbl-sd" class="sat-value">0.0%</span>
-      </div>
-
-      <div class="sat-row">
-        <span class="sat-label">Crit Chance</span>
-        <div class="progress-track"><div id="pb-fill-cc" class="progress-fill"></div></div>
-        <span id="pb-lbl-cc" class="sat-value">0.0%</span>
-      </div>
-    </section>
-
-    <!-- Auxiliary Timing & Hit Data -->
-    <div class="aux-card">
-      <span id="lbl-time-per-hit">TIME PER HIT: 0.0s</span>
-      <span id="lbl-crit-dmg">CRIT DMG: 0.0% -> 1.2x</span>
     </div>
-
   </main>
 
   <!-- ================= MODALS ================= -->
@@ -154,23 +182,16 @@
       </div>
       <div class="modal-body">
         
-        <!-- Weapon Toggle -->
+        <!-- Weapon Toggle (Slot 6 only) -->
         <div id="calib-weapon-toggle" class="weapon-toggle-group hidden">
           <button id="btn-wp-m" class="btn-toggle">⚔️ MELEE</button>
           <button id="btn-wp-r" class="btn-toggle">🏹 RANGED</button>
         </div>
 
-        <!-- Rarity Picker -->
-        <div id="calib-rarity-select-group" class="field-group hidden">
+        <!-- Rarity Selector (Available for all slots!) -->
+        <div id="calib-rarity-select-group" class="field-group">
           <label>Rarity Tier</label>
-          <select id="calib-rarity-select">
-            <option value="Common">Common [Grey]</option>
-            <option value="Rare">Rare [Blue]</option>
-            <option value="Epic">Epic [Green]</option>
-            <option value="Legendary">Legendary [Yellow]</option>
-            <option value="Ultimate">Ultimate [Red]</option>
-            <option value="Mythic">Mythic [Purple]</option>
-          </select>
+          <select id="calib-rarity-select"></select>
         </div>
 
         <!-- Flat HP and DMG (supports k/m) -->
@@ -262,14 +283,7 @@
       <div class="modal-body">
         <div class="field-group">
           <label>Rarity Tier</label>
-          <select id="storage-rarity-select">
-            <option value="Common">Common [Grey]</option>
-            <option value="Rare">Rare [Blue]</option>
-            <option value="Epic">Epic [Green]</option>
-            <option value="Legendary">Legendary [Yellow]</option>
-            <option value="Ultimate">Ultimate [Red]</option>
-            <option value="Mythic">Mythic [Purple]</option>
-          </select>
+          <select id="storage-rarity-select"></select>
         </div>
 
         <div class="inputs-grid-2">
@@ -342,14 +356,14 @@
           <b>+203.0% -> 0.4s</b> | +233.4% -> 0.35s | +400.1% -> 0.3s
         </p>
 
-        <h4 style="color:#3498db; margin-top:10px;">Metric Inputs (k & m)</h4>
+        <h4 style="color:#3498db; margin-top:10px;">Equipment Rarities (Slots 1-8)</h4>
+        <p>Primitive (Szary), Medieval (Niebieski), Early-Modern (Zielony), Modern (Żółty), Space (Czerwony), Interstellar (Jasny fioletowy), Multiverse (Błękitny), Quantum (Ciemny fioletowy), Underworld (Brązowy), Divine (Pomarańczowy).</p>
+
+        <h4 style="color:#2ecc71; margin-top:10px;">Metric Inputs (k & m)</h4>
         <p>Base Flat HP and Flat DMG input fields support raw true numbers and metric abbreviations (e.g. <code>20k</code> = 20,000, <code>1.3m</code> = 1,300,000).</p>
 
-        <h4 style="color:#2ecc71; margin-top:10px;">Fairy Mira (Crit Fairy)</h4>
+        <h4 style="color:#9b59b6; margin-top:10px;">Fairy Mira (Crit Fairy)</h4>
         <p>Every 15% Skill Damage (SD) grants 1 Fairy Block. Each block converts to Crit Chance based on your Fairy Level (capped at 80% bonus CC).</p>
-
-        <h4 style="color:#9b59b6; margin-top:10px;">Storage Optimizer</h4>
-        <p>Tests all combinations of 1 Mount and 3 Pets against your current armor, enforcing the 30% Lifesteal constraint and finding the optimal all-around build.</p>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary btn-close-modal">Close</button>
@@ -365,14 +379,12 @@
         <button class="btn-close btn-close-modal">✕</button>
       </div>
       <div class="modal-body" style="font-size: 0.85rem; line-height: 1.5; color: #ecf0f1;">
-        <h4 style="color:#e67e22;">Mobile & Web Edition Release:</h4>
+        <h4 style="color:#e67e22;">Mobile & Desktop Responsive Layout Update:</h4>
         <ul style="padding-left: 20px; margin-top: 4px;">
-          <li>Full mobile PWA compatibility: add to home screen on iOS and Android for a native app feel!</li>
-          <li>Works 100% offline via Service Worker.</li>
-          <li>Full synchronisation with PC build files via Import/Export JSON.</li>
-          <li>Includes newly discovered +203.0% Attack Speed breakpoint (0.4s interval).</li>
-          <li>Supports metric 'k' and 'm' inputs without manual zeroes.</li>
-          <li>All-around storage optimization algorithm prioritizing raw DPS and sustain.</li>
+          <li><b>Responsive 2-Column Desktop View:</b> Equipment & Pets on the left, Hero stats and Saturation on the right. Zero horizontal stretching!</li>
+          <li><b>Sticky Mobile Bar:</b> Compact header keeping your live DPS & HPS visible as you scroll on phones.</li>
+          <li><b>Equipment Rarities:</b> Added all 10 Era/Rarity tiers for Equipment Slots 1–8 (Primitive, Medieval, Early-Modern, Modern, Space, Interstellar, Multiverse, Quantum, Underworld, Divine) with matching glowing borders and badges.</li>
+          <li>Full PWA offline support and JSON sync.</li>
         </ul>
       </div>
       <div class="modal-footer">

@@ -1,16 +1,43 @@
 /**
- * Forge Master Optimizer - Mobile & Desktop Web Edition
- * Full math engine matching calcapp.py v2.1.0 (with 203% AS BP & metric k/m inputs)
+ * Forge Master Optimizer - Mobile & Desktop Web Edition v2.2.0
+ * Features:
+ * - 10 Equipment Rarities for Slots 1-8 (Primitive, Medieval, Early-Modern, Modern, Space, Interstellar, Multiverse, Quantum, Underworld, Divine)
+ * - 6 Pet/Mount Rarities for Slots 9-12 & Storage (Common, Rare, Epic, Legendary, Ultimate, Mythic)
+ * - Attack Speed 203% & 233.4% Breakpoints
+ * - Responsive 2-Column Desktop & 1-Column Mobile Layout
+ * - Metric k/m base inputs without legacy x1000 multiplier
  */
 
-const RARITY_CONFIG = {
-  Common: { color: "#bdc3c7", border: "#bdc3c7", name: "Common" },
-  Rare: { color: "#3498db", border: "#3498db", name: "Rare" },
-  Epic: { color: "#2ecc71", border: "#2ecc71", name: "Epic" },
-  Legendary: { color: "#f1c40f", border: "#f1c40f", name: "Legendary" },
-  Ultimate: { color: "#e74c3c", border: "#e74c3c", name: "Ultimate" },
-  Mythic: { color: "#9b59b6", border: "#9b59b6", name: "Mythic" }
+const ITEM_RARITIES = {
+  "Primitive": { name: "Primitive", color: "#95a5a6", border: "#95a5a6" },
+  "Medieval": { name: "Medieval", color: "#3498db", border: "#3498db" },
+  "Early-Modern": { name: "Early-Modern", color: "#2ecc71", border: "#2ecc71" },
+  "Modern": { name: "Modern", color: "#f1c40f", border: "#f1c40f" },
+  "Space": { name: "Space", color: "#e74c3c", border: "#e74c3c" },
+  "Interstellar": { name: "Interstellar", color: "#d980fa", border: "#d980fa" },
+  "Multiverse": { name: "Multiverse", color: "#00d2d3", border: "#00d2d3" },
+  "Quantum": { name: "Quantum", color: "#6c5ce7", border: "#6c5ce7" },
+  "Underworld": { name: "Underworld", color: "#cd6133", border: "#cd6133" },
+  "Divine": { name: "Divine", color: "#ff793f", border: "#ff793f" }
 };
+
+const PET_RARITIES = {
+  "Common": { name: "Common", color: "#bdc3c7", border: "#bdc3c7" },
+  "Rare": { name: "Rare", color: "#3498db", border: "#3498db" },
+  "Epic": { name: "Epic", color: "#2ecc71", border: "#2ecc71" },
+  "Legendary": { name: "Legendary", color: "#f1c40f", border: "#f1c40f" },
+  "Ultimate": { name: "Ultimate", color: "#e74c3c", border: "#e74c3c" },
+  "Mythic": { name: "Mythic", color: "#9b59b6", border: "#9b59b6" }
+};
+
+const ALL_RARITIES_MAP = {};
+for (const k in ITEM_RARITIES) {
+  ALL_RARITIES_MAP[k.toLowerCase()] = ITEM_RARITIES[k];
+}
+for (const k in PET_RARITIES) {
+  ALL_RARITIES_MAP[k.toLowerCase()] = PET_RARITIES[k];
+}
+ALL_RARITIES_MAP["earlymodern"] = ITEM_RARITIES["Early-Modern"];
 
 const STAT_NAMES = {
   md: "Melee DMG", as: "Attack Speed", ls: "Lifesteal",
@@ -54,14 +81,14 @@ const DEFAULT_STATE = {
   fairy_lvl: 11.0,
   target_build: "Post-Quantum Ranged",
   items: [
-    "2970000h, 25.6as, 19.4sd",
-    "1580000h, 27.9as, 75cd",
-    "197000d, 19.4dc, 55.3cd",
-    "397000d, 38.3as, 10.2cc",
-    "239000d, 39.8as, 21.4sd",
-    "R, 243000d, 75.6cd, 5.84rd",
-    "1880000h, 39.7as, 22.2sd",
-    "1840000h, 67.2cd, 33.1as",
+    "Primitive, 2970000h, 25.6as, 19.4sd",
+    "Primitive, 1580000h, 27.9as, 75cd",
+    "Primitive, 197000d, 19.4dc, 55.3cd",
+    "Primitive, 397000d, 38.3as, 10.2cc",
+    "Primitive, 239000d, 39.8as, 21.4sd",
+    "R, Space, 243000d, 75.6cd, 5.84rd",
+    "Primitive, 1880000h, 39.7as, 22.2sd",
+    "Primitive, 1840000h, 67.2cd, 33.1as",
     "Common, 3015000h, 381000d, 19.1ls",
     "Legendary, 1040000h, 406000d, 16.6ls, 79.8cd",
     "Legendary, 696000h, 270000d, 27.6sd, 13.7dmg",
@@ -124,21 +151,30 @@ function formatMetricValue(val) {
   }
 }
 
-function parsePetRarity(itemStr) {
-  if (!itemStr) return { rarity: null, cleanStr: "" };
-  const parts = itemStr.split(",").map(p => p.trim());
-  if (parts.length > 0) {
-    const cap = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
-    if (RARITY_CONFIG[cap]) {
-      return { rarity: cap, cleanStr: parts.slice(1).join(", ") };
+function parseItemRarity(itemStr, isWeapon = false) {
+  if (!itemStr) return { rarity: null, weapon: null, cleanStr: "" };
+  let parts = itemStr.split(",").map(p => p.trim());
+  let rarity = null;
+  let weapon = null;
+
+  for (let step = 0; step < 2 && parts.length > 0; step++) {
+    const token = parts[0];
+    const tokenLower = token.toLowerCase();
+    if (isWeapon && ['M', 'R'].includes(token.toUpperCase()) && !weapon) {
+      weapon = token.toUpperCase();
+      parts = parts.slice(1);
+    } else if (ALL_RARITIES_MAP[tokenLower] && !rarity) {
+      rarity = ALL_RARITIES_MAP[tokenLower].name;
+      parts = parts.slice(1);
     }
   }
-  return { rarity: null, cleanStr: itemStr };
+
+  return { rarity, weapon, cleanStr: parts.join(", ") };
 }
 
-function formatDisplayItemString(rawStr) {
-  if (!rawStr) return "";
-  const parts = rawStr.split(",").map(p => p.trim());
+function formatDisplayItemString(cleanStr) {
+  if (!cleanStr) return "";
+  const parts = cleanStr.split(",").map(p => p.trim());
   const formatted = [];
   for (const p of parts) {
     const m = p.toLowerCase().match(/^([0-9.]+)([a-z]+)$/);
@@ -210,23 +246,16 @@ function computeCoreStats(targetBuild) {
     if (!rawText) continue;
 
     try {
-      let parts = rawText.split(",").map(p => p.trim());
+      const { rarity, weapon, cleanStr } = parseItemRarity(rawText, isWeapon);
       if (isWeapon) {
-        if (parts.length > 0 && ['M', 'R'].includes(parts[0].toUpperCase())) {
-          weaponType = parts[0].toUpperCase();
-          parts = parts.slice(1);
+        if (weapon) {
+          weaponType = weapon;
         } else {
-          throw new Error("Requires 'M' or 'R' flag first!");
+          throw new Error("Requires 'M' or 'R' weapon flag!");
         }
       }
 
-      if (parts.length > 0) {
-        const cap = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
-        if (RARITY_CONFIG[cap]) {
-          parts = parts.slice(1);
-        }
-      }
-
+      const parts = cleanStr.split(",").map(p => p.trim());
       for (let p of parts) {
         p = p.toLowerCase();
         if (p === '0' || !p) continue;
@@ -305,14 +334,8 @@ function calculateBuildScore(realDps, realHp, realHps) {
 }
 
 function calculateEffectiveQuality(itemStr, isWeapon, oldStats, newStats, fairyLvl) {
-  let parts = itemStr.split(",").map(p => p.trim());
-  if (isWeapon && parts.length > 0 && ['M', 'R'].includes(parts[0].toUpperCase())) {
-    parts = parts.slice(1);
-  }
-  if (parts.length > 0) {
-    const cap = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
-    if (RARITY_CONFIG[cap]) parts = parts.slice(1);
-  }
+  const { cleanStr } = parseItemRarity(itemStr, isWeapon);
+  const parts = cleanStr.split(",").map(p => p.trim());
 
   const pctScores = [];
   for (let p of parts) {
@@ -358,7 +381,6 @@ function calculateEffectiveQuality(itemStr, isWeapon, oldStats, newStats, fairyL
   return (pctScores.reduce((a, b) => a + b, 0) / pctScores.length) * 100.0;
 }
 
-// Generate combination generator (n choose k)
 function combinations(arr, k) {
   const result = [];
   function backtrack(start, path) {
@@ -502,12 +524,18 @@ function updateUI() {
   const targetMult = BENCHMARKS[appState.target_build] || 260.0;
   const matchProg = (multObj.dpsMult / targetMult) * 100.0;
 
-  // Header stats
+  // Desktop Hero stats
   document.getElementById('lbl-dps').textContent = `REAL DPS: ${realDps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
-  document.getElementById('lbl-hps').textContent = `REAL HPS: ${realHps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
-  document.getElementById('lbl-mult').textContent = `EFF. DPS MULTIPLIER: ${multObj.dpsMult.toFixed(1)}x`;
+  document.getElementById('lbl-hps').textContent = `${realHps.toLocaleString('en-US', { maximumFractionDigits: 1 })}`;
+  document.getElementById('lbl-mult').textContent = `${multObj.dpsMult.toFixed(1)}x`;
   document.getElementById('lbl-match').textContent = `OPTIMAL BUILD MATCH: ${matchProg.toFixed(1)}%`;
   document.getElementById('lbl-base-summary').textContent = `BASE DMG: ${core.totalDmg.toLocaleString('en-US', { maximumFractionDigits: 1 })} | TOTAL HP: ${realTotalHp.toLocaleString('en-US', { maximumFractionDigits: 1 })} (+${core.stats.hp.toFixed(1)}%)`;
+
+  // Mobile Sticky Header stats
+  document.getElementById('mob-lbl-dps').textContent = `DPS: ${realDps.toLocaleString('en-US', { maximumFractionDigits: 1 })}`;
+  document.getElementById('mob-lbl-hps').textContent = `HPS: ${realHps.toLocaleString('en-US', { maximumFractionDigits: 1 })}`;
+  document.getElementById('mob-lbl-mult').textContent = `MULT: ${multObj.dpsMult.toFixed(1)}x`;
+  document.getElementById('mob-lbl-match').textContent = `MATCH: ${matchProg.toFixed(1)}%`;
 
   document.getElementById('lbl-time-per-hit').textContent = `TIME PER HIT: ${multObj.timePerHit.toFixed(2)}s`;
   document.getElementById('lbl-crit-dmg').textContent = `CRIT DMG: ${core.stats.cd.toFixed(1)}% -> ${multObj.realCd.toFixed(2)}x`;
@@ -573,38 +601,52 @@ function renderSlotButton(idx) {
   if (!btn) return;
 
   const raw = appState.items[idx];
+  const isWeapon = (idx === 5);
+  const isHybrid = (idx >= 8);
+
   let title = `S${idx + 1}`;
-  if (idx === 5) title = "WEAPON";
+  if (isWeapon) title = "WEAPON";
   else if (idx === 8) title = "MOUNT";
   else if (idx === 9) title = "PET 1";
   else if (idx === 10) title = "PET 2";
   else if (idx === 11) title = "PET 3";
 
   if (!raw) {
-    btn.innerHTML = `<div class="slot-title">${title}</div><div class="slot-empty">(EMPTY)</div>`;
+    btn.innerHTML = `<div class="slot-header"><span class="slot-title">${title}</span></div><div class="slot-empty">(EMPTY)</div>`;
     btn.style.borderColor = '#2c3e50';
     btn.style.boxShadow = 'none';
     return;
   }
 
-  const { rarity, cleanStr } = parsePetRarity(raw);
-  const formatted = formatDisplayItemString(cleanStr || raw);
+  const { rarity, weapon, cleanStr } = parseItemRarity(raw, isWeapon);
+  const formatted = formatDisplayItemString(cleanStr);
   const lines = formatted.split(", ").map(l => `<div class="slot-stat">${l}</div>`).join("");
 
-  let badge = "";
-  let border = (idx === 5) ? '#e74c3c' : '#3498db';
+  const raritiesMap = isHybrid ? PET_RARITIES : ITEM_RARITIES;
+  const rCfg = rarity && raritiesMap[rarity] ? raritiesMap[rarity] : (rarity && ALL_RARITIES_MAP[rarity.toLowerCase()] ? ALL_RARITIES_MAP[rarity.toLowerCase()] : null);
 
-  if (rarity && RARITY_CONFIG[rarity]) {
-    border = RARITY_CONFIG[rarity].border;
-    badge = `<span class="rarity-badge" style="background:${RARITY_CONFIG[rarity].color}; color:#121217;">${rarity.toUpperCase()}</span>`;
+  let badge = "";
+  let border = isWeapon ? '#e74c3c' : '#3498db';
+  let glow = 'none';
+
+  if (rCfg) {
+    border = rCfg.border;
+    glow = `0 0 12px ${rCfg.border}55`;
+    badge = `<span class="rarity-badge" style="background:${rCfg.color}; color:#121217;">${rCfg.name.toUpperCase()}</span>`;
+  }
+
+  if (isWeapon && weapon) {
+    const wpColor = weapon === 'M' ? '#e74c3c' : '#3498db';
+    const wpBadge = `<span class="weapon-flag-badge" style="background:${wpColor}; color:#fff;">${weapon}</span>`;
+    badge = `${wpBadge} ${badge}`;
   }
 
   btn.style.borderColor = border;
-  btn.style.boxShadow = rarity ? `0 0 10px ${border}44` : 'none';
+  btn.style.boxShadow = glow;
   btn.innerHTML = `
     <div class="slot-header">
       <span class="slot-title">${title}</span>
-      ${badge}
+      <div class="slot-badges">${badge}</div>
     </div>
     <div class="slot-body">${lines}</div>
   `;
@@ -635,39 +677,33 @@ function openCalibrationModal(idx) {
     wpSection.classList.add('hidden');
   }
 
-  // Rarity selector
-  const raritySection = document.getElementById('calib-rarity-select-group');
-  if (isHybrid) {
-    raritySection.classList.remove('hidden');
-  } else {
-    raritySection.classList.add('hidden');
-  }
-
   // Parse existing data
   const raw = appState.items[idx] || "";
-  let parts = raw.split(",").map(p => p.trim());
-  let curWeapon = "R";
-  let curRarity = "Common";
+  const { rarity: loadedRarity, weapon: loadedWeapon, cleanStr } = parseItemRarity(raw, isWeapon);
 
-  if (isWeapon && parts.length > 0 && ['M', 'R'].includes(parts[0].toUpperCase())) {
-    curWeapon = parts[0].toUpperCase();
-    parts = parts.slice(1);
-  }
-  if (parts.length > 0) {
-    const cap = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
-    if (RARITY_CONFIG[cap]) {
-      curRarity = cap;
-      parts = parts.slice(1);
-    }
-  }
+  // Populate Rarity options
+  const raritySelect = document.getElementById('calib-rarity-select');
+  const raritiesObj = isHybrid ? PET_RARITIES : ITEM_RARITIES;
 
-  setWeaponButtonActive(curWeapon);
-  document.getElementById('calib-rarity-select').value = curRarity;
+  let optionsHtml = "";
+  if (!isHybrid) {
+    optionsHtml += `<option value="None" style="color:#7f8c8d;">(None)</option>`;
+  }
+  optionsHtml += Object.keys(raritiesObj).map(rName => {
+    const cfg = raritiesObj[rName];
+    return `<option value="${rName}" style="color:${cfg.color}; font-weight:bold;">${rName}</option>`;
+  }).join("");
+
+  raritySelect.innerHTML = optionsHtml;
+  raritySelect.value = loadedRarity || (isHybrid ? "Common" : (Object.keys(ITEM_RARITIES)[0]));
+
+  setWeaponButtonActive(loadedWeapon || "R");
 
   // Clear all input fields
   document.querySelectorAll('.calib-input').forEach(inp => inp.value = "");
 
   // Populate inputs
+  const parts = cleanStr.split(",").map(p => p.trim());
   for (const p of parts) {
     const m = p.toLowerCase().match(/^([0-9.]+)([a-z]+)$/);
     if (m) {
@@ -709,11 +745,9 @@ function constructItemStringFromCalibrationForm(isWeapon, isHybrid) {
     parts.push(isMelee ? "M" : "R");
   }
 
-  if (isHybrid) {
-    const rarity = document.getElementById('calib-rarity-select').value;
-    if (rarity && RARITY_CONFIG[rarity]) {
-      parts.push(rarity);
-    }
+  const rarity = document.getElementById('calib-rarity-select').value;
+  if (rarity && rarity !== "None") {
+    parts.push(rarity);
   }
 
   const hVal = parseMetricValue(document.getElementById('inp-calib-h').value);
@@ -753,7 +787,7 @@ function runMarginalSimulation() {
   }
 
   document.getElementById('sim-swap-result').innerHTML = `
-    <div style="background:#121217; padding:12px; border-radius:8px; border:1px solid #2c3e50;">
+    <div style="background:#121217; padding:12px; border-radius:8px; border:1px solid #2c3e50; margin-top:8px;">
       <div style="font-weight:bold; color:${dpsColor}; font-size:15px;">
         DPS: ${res.newRealDps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${sign}${dpsDiff.toFixed(1)}%)
       </div>
@@ -795,13 +829,13 @@ function renderStorageLists() {
 }
 
 function createStorageItemRow(itemStr, idx, isMount) {
-  const { rarity, cleanStr } = parsePetRarity(itemStr);
+  const { rarity, cleanStr } = parseItemRarity(itemStr, false);
   const formatted = formatDisplayItemString(cleanStr || itemStr);
-  const rColor = rarity && RARITY_CONFIG[rarity] ? RARITY_CONFIG[rarity].color : '#bdc3c7';
-  const badge = rarity ? `<span class="rarity-badge" style="background:${rColor}; color:#121217; margin-right:6px;">${rarity.toUpperCase()}</span>` : "";
+  const rCfg = rarity && PET_RARITIES[rarity] ? PET_RARITIES[rarity] : (rarity && ALL_RARITIES_MAP[rarity.toLowerCase()] ? ALL_RARITIES_MAP[rarity.toLowerCase()] : { color: '#bdc3c7', name: rarity || 'Common' });
+  const badge = `<span class="rarity-badge" style="background:${rCfg.color}; color:#121217; margin-right:6px;">${rCfg.name.toUpperCase()}</span>`;
 
   return `
-    <div class="storage-row" style="border-left: 4px solid ${rColor};">
+    <div class="storage-row" style="border-left: 4px solid ${rCfg.color};">
       <div class="storage-info" onclick="openStorageItemEdit(${idx}, ${isMount})">
         ${badge} <span class="storage-stats">${formatted}</span>
       </div>
@@ -831,18 +865,22 @@ function openStorageItemEdit(idx, isMount) {
 
   // Reset inputs
   document.querySelectorAll('.storage-input').forEach(inp => inp.value = "");
-  document.getElementById('storage-rarity-select').value = "Common";
+
+  // Populate pet rarities
+  const raritySelect = document.getElementById('storage-rarity-select');
+  raritySelect.innerHTML = Object.keys(PET_RARITIES).map(rName => {
+    const cfg = PET_RARITIES[rName];
+    return `<option value="${rName}" style="color:${cfg.color}; font-weight:bold;">${rName}</option>`;
+  }).join("");
+  raritySelect.value = "Common";
 
   if (isEdit) {
     const raw = isMount ? appState.mount_storage[idx] : appState.pet_storage[idx];
-    let parts = (raw || "").split(",").map(p => p.trim());
-    if (parts.length > 0) {
-      const cap = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase();
-      if (RARITY_CONFIG[cap]) {
-        document.getElementById('storage-rarity-select').value = cap;
-        parts = parts.slice(1);
-      }
+    const { rarity: loadedRarity, cleanStr } = parseItemRarity(raw || "", false);
+    if (loadedRarity && PET_RARITIES[loadedRarity]) {
+      raritySelect.value = loadedRarity;
     }
+    const parts = cleanStr.split(",").map(p => p.trim());
     for (const p of parts) {
       const m = p.toLowerCase().match(/^([0-9.]+)([a-z]+)$/);
       if (m) {
@@ -868,7 +906,7 @@ function openStorageItemEdit(idx, isMount) {
 function saveStorageItem() {
   const parts = [];
   const rarity = document.getElementById('storage-rarity-select').value;
-  if (rarity && RARITY_CONFIG[rarity]) {
+  if (rarity && PET_RARITIES[rarity]) {
     parts.push(rarity);
   }
 
