@@ -56,10 +56,9 @@ const MAX_ROLLS = {
 };
 
 const BENCHMARKS = {
-  "Post-Quantum Ranged": 260.0,
-  "Pre-Quantum Ranged": 180.0,
-  "Gigachad Melee": 220.0,
-  "Hybrid Sustain": 195.0
+  "Pre-Quantum Melee": 9.0,
+  "Post-Quantum Ranged": 18.7,
+  "Post-Quantum Melee": 40.6
 };
 
 const BPS = [
@@ -170,6 +169,15 @@ function parseItemRarity(itemStr, isWeapon = false) {
   }
 
   return { rarity, weapon, cleanStr: parts.join(", ") };
+}
+
+
+function formatItemSummary(rawStr) {
+  if (!rawStr) return "(Empty)";
+  const { rarity, weapon, cleanStr } = parseItemRarity(rawStr, false);
+  const formattedStats = formatDisplayItemString(cleanStr);
+  const rarityPrefix = rarity ? `[${rarity.toUpperCase()}] ` : "";
+  return `${rarityPrefix}${formattedStats}`;
 }
 
 function formatDisplayItemString(cleanStr) {
@@ -521,7 +529,7 @@ function updateUI() {
   const realTotalHp = core.totalHp * (1.0 + (core.stats.hp / 100.0));
   const realHps = (realDps * (core.stats.ls / 100.0)) + (realTotalHp * (core.stats.hr / 100.0));
 
-  const targetMult = BENCHMARKS[appState.target_build] || 260.0;
+  const targetMult = BENCHMARKS[appState.target_build] || 18.7;
   const matchProg = (multObj.dpsMult / targetMult) * 100.0;
 
   // Desktop Hero stats
@@ -801,6 +809,326 @@ function runMarginalSimulation() {
       ${lsWarning}
     </div>
   `;
+}
+
+
+function runSimulationWithStorage() {
+  const isWeapon = (currentCalibrationSlot === 5);
+  const isHybrid = (currentCalibrationSlot >= 8);
+  const testItemStr = constructItemStringFromCalibrationForm(isWeapon, isHybrid);
+
+  // 1. Current Baseline stats
+  const currCore = computeCoreStats(appState.items);
+  const currMultObj = computeMultipliers(currCore.stats, currCore.weaponType, appState.fairy_lvl);
+  const currDps = currCore.totalDmg * currMultObj.dpsMult;
+  const currHp = currCore.totalHp * (1.0 + (currCore.stats.hp / 100.0));
+  const currHps = (currDps * (currCore.stats.ls / 100.0)) + (currHp * (currCore.stats.hr / 100.0));
+  const currLs = currCore.stats.ls;
+  const currScore = calculateBuildScore(currDps, currHp, currHps);
+
+  // 2. Base test build with new item in currentCalibrationSlot
+  const tempBuild = [...appState.items];
+  tempBuild[currentCalibrationSlot] = testItemStr;
+
+  // 3. Candidate Mounts
+  let candidateMounts = [];
+  if (currentCalibrationSlot === 8) {
+    candidateMounts = [testItemStr];
+  } else {
+    const mSet = new Set();
+    if (tempBuild[8]) mSet.add(tempBuild[8]);
+    for (const m of appState.mount_storage) {
+      if (m) mSet.add(m);
+    }
+    candidateMounts = Array.from(mSet);
+    if (candidateMounts.length === 0) candidateMounts = [tempBuild[8] || ""];
+  }
+
+  // 4. Candidate Combinations & Optimization Loop
+  let bestCombo = null;
+  let bestScore = -1.0;
+  let bestDps = 0.0;
+  let bestMult = 0.0;
+  let bestHp = 0.0;
+  let bestHps = 0.0;
+  let bestLs = 0.0;
+
+  // Check testBuild as-is first (without any storage swaps)
+  const noSwapCore = computeCoreStats(tempBuild);
+  const noSwapMult = computeMultipliers(noSwapCore.stats, noSwapCore.weaponType, appState.fairy_lvl);
+  const noSwapDps = noSwapCore.totalDmg * noSwapMult.dpsMult;
+  const noSwapHp = noSwapCore.totalHp * (1.0 + (noSwapCore.stats.hp / 100.0));
+  const noSwapHps = (noSwapDps * (noSwapCore.stats.ls / 100.0)) + (noSwapHp * (noSwapCore.stats.hr / 100.0));
+  const noSwapScore = calculateBuildScore(noSwapDps, noSwapHp, noSwapHps);
+
+  if (noSwapCore.stats.ls >= 30.0) {
+    bestScore = noSwapScore;
+    bestDps = noSwapDps;
+    bestMult = noSwapMult.dpsMult;
+    bestHp = noSwapHp;
+    bestHps = noSwapHps;
+    bestLs = noSwapCore.stats.ls;
+    bestCombo = [tempBuild[8] || "", tempBuild[9] || "", tempBuild[10] || "", tempBuild[11] || ""];
+  }
+
+  if (currentCalibrationSlot >= 9) {
+    // Calibrating a specific pet slot (9, 10, or 11):
+    // testItemStr is mandatory as one of the pets.
+    const otherCandidatePets = [];
+    for (let pIdx = 9; pIdx <= 11; pIdx++) {
+      if (pIdx !== currentCalibrationSlot && tempBuild[pIdx]) {
+        otherCandidatePets.push(tempBuild[pIdx]);
+      }
+    }
+    for (const sp of appState.pet_storage) {
+      if (sp) otherCandidatePets.push(sp);
+    }
+
+    const petCombos = otherCandidatePets.length >= 2 ? combinations(otherCandidatePets, 2) : [];
+    for (const m of candidateMounts) {
+      if (petCombos.length > 0) {
+        for (const [pA, pB] of petCombos) {
+          const trial = [...tempBuild];
+          trial[8] = m;
+          trial[9] = testItemStr;
+          trial[10] = pA;
+          trial[11] = pB;
+
+          const c = computeCoreStats(trial);
+          const mObj = computeMultipliers(c.stats, c.weaponType, appState.fairy_lvl);
+          const d = c.totalDmg * mObj.dpsMult;
+          const h = c.totalHp * (1.0 + (c.stats.hp / 100.0));
+          const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
+          const score = calculateBuildScore(d, h, hps);
+
+          if (c.stats.ls >= 30.0 && score > bestScore) {
+            bestScore = score;
+            bestDps = d;
+            bestMult = mObj.dpsMult;
+            bestHp = h;
+            bestHps = hps;
+            bestLs = c.stats.ls;
+            bestCombo = [m, testItemStr, pA, pB];
+          }
+        }
+      } else {
+        const trial = [...tempBuild];
+        trial[8] = m;
+        const c = computeCoreStats(trial);
+        const mObj = computeMultipliers(c.stats, c.weaponType, appState.fairy_lvl);
+        const d = c.totalDmg * mObj.dpsMult;
+        const h = c.totalHp * (1.0 + (c.stats.hp / 100.0));
+        const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
+        const score = calculateBuildScore(d, h, hps);
+
+        if (c.stats.ls >= 30.0 && score > bestScore) {
+          bestScore = score;
+          bestDps = d;
+          bestMult = mObj.dpsMult;
+          bestHp = h;
+          bestHps = hps;
+          bestLs = c.stats.ls;
+          bestCombo = [m, trial[9] || "", trial[10] || "", trial[11] || ""];
+        }
+      }
+    }
+  } else {
+    // Calibrating Slots 0..8 (Forge item or Mount)
+    const candidatePetPool = [];
+    for (let pIdx = 9; pIdx <= 11; pIdx++) {
+      if (tempBuild[pIdx]) candidatePetPool.push(tempBuild[pIdx]);
+    }
+    for (const sp of appState.pet_storage) {
+      if (sp) candidatePetPool.push(sp);
+    }
+
+    const petCombos = candidatePetPool.length >= 3 ? combinations(candidatePetPool, 3) : [];
+
+    for (const m of candidateMounts) {
+      if (petCombos.length > 0) {
+        for (const [p0, p1, p2] of petCombos) {
+          const trial = [...tempBuild];
+          trial[8] = m;
+          trial[9] = p0;
+          trial[10] = p1;
+          trial[11] = p2;
+
+          const c = computeCoreStats(trial);
+          const mObj = computeMultipliers(c.stats, c.weaponType, appState.fairy_lvl);
+          const d = c.totalDmg * mObj.dpsMult;
+          const h = c.totalHp * (1.0 + (c.stats.hp / 100.0));
+          const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
+          const score = calculateBuildScore(d, h, hps);
+
+          if (c.stats.ls >= 30.0 && score > bestScore) {
+            bestScore = score;
+            bestDps = d;
+            bestMult = mObj.dpsMult;
+            bestHp = h;
+            bestHps = hps;
+            bestLs = c.stats.ls;
+            bestCombo = [m, p0, p1, p2];
+          }
+        }
+      } else {
+        const trial = [...tempBuild];
+        trial[8] = m;
+        const c = computeCoreStats(trial);
+        const mObj = computeMultipliers(c.stats, c.weaponType, appState.fairy_lvl);
+        const d = c.totalDmg * mObj.dpsMult;
+        const h = c.totalHp * (1.0 + (c.stats.hp / 100.0));
+        const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
+        const score = calculateBuildScore(d, h, hps);
+
+        if (c.stats.ls >= 30.0 && score > bestScore) {
+          bestScore = score;
+          bestDps = d;
+          bestMult = mObj.dpsMult;
+          bestHp = h;
+          bestHps = hps;
+          bestLs = c.stats.ls;
+          bestCombo = [m, trial[9] || "", trial[10] || "", trial[11] || ""];
+        }
+      }
+    }
+  }
+
+  // 5. Verdict and Results
+  const container = document.getElementById('sim-swap-result');
+
+  if (!bestCombo || bestLs < 30.0) {
+    const reachableLs = noSwapCore.stats.ls.toFixed(1);
+    container.innerHTML = `
+      <div class="sim-verdict-card verdict-reject">
+        <div class="verdict-header">
+          <span class="verdict-badge reject">⚠️ REJECT: LIFESTEAL &lt; 30%</span>
+          <span class="verdict-diff">SURVIVAL FAILED</span>
+        </div>
+        <div class="verdict-stats">
+          <div><strong>Lifesteal:</strong> ${reachableLs}% (Threshold: &ge; 30.0%)</div>
+          <div><strong>Reason:</strong> Even testing all pet & mount storage combinations, Lifesteal cannot reach 30%. Taking this item breaks survival protocol!</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const dpsDiff = currDps > 0 ? ((bestDps / currDps) - 1.0) * 100.0 : 0.0;
+  const hpsDiff = currHps > 0 ? ((bestHps / currHps) - 1.0) * 100.0 : 0.0;
+  const dpsSign = dpsDiff >= 0 ? "+" : "";
+  const hpsSign = hpsDiff >= 0 ? "+" : "";
+
+  const targetMult = BENCHMARKS[appState.target_build] || 18.7;
+  const newMatchProg = (bestMult / targetMult) * 100.0;
+
+  // Criteria for recommendation: composite score increases and DPS does not regress (> 98%)
+  const isUpgrade = (bestScore > currScore && bestDps >= currDps * 0.98);
+
+  // 6. Analyze required swaps
+  const currentMount = appState.items[8] || "";
+  const winningMount = bestCombo[0] || "";
+  let mountChanged = (currentMount !== winningMount && currentCalibrationSlot !== 8);
+
+  const currPets = [appState.items[9] || "", appState.items[10] || "", appState.items[11] || ""];
+  const winningPets = [bestCombo[1] || "", bestCombo[2] || "", bestCombo[3] || ""];
+
+  // Pair up swapped pets
+  const remainingWinning = [...winningPets];
+  const retainedCurr = [];
+  for (const cp of currPets) {
+    const idx = remainingWinning.indexOf(cp);
+    if (idx !== -1) {
+      retainedCurr.push(cp);
+      remainingWinning.splice(idx, 1);
+    }
+  }
+  const removedPets = currPets.filter(cp => !retainedCurr.includes(cp));
+  const addedPets = remainingWinning;
+
+  let swapsHtml = "";
+  let hasSwaps = false;
+
+  if (mountChanged) {
+    hasSwaps = true;
+    swapsHtml += `
+      <div class="swap-item">
+        <span class="swap-type">Mount</span>
+        <span class="swap-old">${formatItemSummary(currentMount)}</span>
+        <span class="swap-arrow">➔</span>
+        <span class="swap-new">${formatItemSummary(winningMount)}</span>
+      </div>
+    `;
+  }
+
+  if (addedPets.length > 0) {
+    hasSwaps = true;
+    for (let i = 0; i < addedPets.length; i++) {
+      const oldP = removedPets[i] || "(Empty)";
+      const newP = addedPets[i];
+      swapsHtml += `
+        <div class="swap-item">
+          <span class="swap-type">Pet</span>
+          <span class="swap-old">${formatItemSummary(oldP)}</span>
+          <span class="swap-arrow">➔</span>
+          <span class="swap-new">${formatItemSummary(newP)}</span>
+        </div>
+      `;
+    }
+  }
+
+  const swapsSectionHtml = hasSwaps ? `
+    <div class="swaps-section">
+      <div class="swaps-title">⚡ REQUIRED STORAGE SWAPS:</div>
+      ${swapsHtml}
+    </div>
+  ` : `
+    <div class="swaps-section">
+      <div class="swaps-none">✨ No pet or mount swaps required — your currently equipped loadout is already optimal!</div>
+    </div>
+  `;
+
+  if (isUpgrade) {
+    container.innerHTML = `
+      <div class="sim-verdict-card verdict-take">
+        <div class="verdict-header">
+          <span class="verdict-badge take">✅ VERDICT: TAKE THIS ITEM!</span>
+          <span class="verdict-diff">${dpsSign}${dpsDiff.toFixed(1)}% DPS</span>
+        </div>
+        <div class="verdict-stats">
+          <div><strong>New Real DPS:</strong> ${bestDps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (was ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
+          <div><strong>Multiplier:</strong> ${bestMult.toFixed(2)}x | <strong>HPS:</strong> ${bestHps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${hpsSign}${hpsDiff.toFixed(1)}%) | <strong>LS:</strong> ${bestLs.toFixed(1)}%</div>
+          <div><strong>Optimal Build Match:</strong> ${newMatchProg.toFixed(1)}%</div>
+        </div>
+        ${swapsSectionHtml}
+        <button id="btn-apply-sim-all" class="btn-primary btn-apply-all">⚡ Equip Item & Apply Swaps</button>
+      </div>
+    `;
+
+    document.getElementById('btn-apply-sim-all').addEventListener('click', () => {
+      appState.items[currentCalibrationSlot] = testItemStr;
+      appState.items[8] = bestCombo[0];
+      appState.items[9] = bestCombo[1];
+      appState.items[10] = bestCombo[2];
+      appState.items[11] = bestCombo[3];
+      saveState();
+      closeModals();
+      updateUI();
+    });
+  } else {
+    container.innerHTML = `
+      <div class="sim-verdict-card verdict-reject">
+        <div class="verdict-header">
+          <span class="verdict-badge reject">❌ VERDICT: DO NOT TAKE</span>
+          <span class="verdict-diff">${dpsSign}${dpsDiff.toFixed(1)}% DPS</span>
+        </div>
+        <div class="verdict-stats">
+          <div><strong>Best Possible DPS:</strong> ${bestDps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (Current: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
+          <div><strong>Reason:</strong> New item results in a weaker build (${dpsSign}${dpsDiff.toFixed(1)}% DPS). Storage pets & mount cannot compensate for the stat loss.</div>
+        </div>
+        ${hasSwaps ? swapsSectionHtml : ''}
+      </div>
+    `;
+  }
 }
 
 function saveCalibrationToBuild() {
@@ -1142,6 +1470,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Calibration buttons
   document.getElementById('btn-sim-swap').addEventListener('click', runMarginalSimulation);
+  document.getElementById('btn-sim-storage').addEventListener('click', runSimulationWithStorage);
   document.getElementById('btn-save-calib').addEventListener('click', saveCalibrationToBuild);
 
   // Storage buttons
