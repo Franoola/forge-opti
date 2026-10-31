@@ -56,9 +56,10 @@ const MAX_ROLLS = {
 };
 
 const BENCHMARKS = {
-  "Pre-Quantum Melee": 9.0,
-  "Post-Quantum Ranged": 18.7,
-  "Post-Quantum Melee": 40.6
+  "Post-Quantum Ranged (Fairy)": 38.5,
+  "Post-Quantum Ranged (No Fairy)": 22.3,
+  "Post-Quantum Melee": 40.6,
+  "Pre-Quantum Melee": 9.0
 };
 
 const BPS = [
@@ -78,7 +79,7 @@ const BPS = [
 const DEFAULT_STATE = {
   format_version: 2,
   fairy_lvl: 11.0,
-  target_build: "Post-Quantum Ranged",
+  target_build: "Post-Quantum Ranged (Fairy)",
   items: [
     "Primitive, 2970000h, 25.6as, 19.4sd",
     "Primitive, 1580000h, 27.9as, 75cd",
@@ -316,7 +317,9 @@ function computeMultipliers(stats, weaponType, fairyLvl) {
   const fairyBlocks = Math.floor(stats.sd / 15.0);
   const fairyCc = Math.min(fairyBlocks * (fairyLvl / 100.0), 0.80);
 
-  const realCc = Math.min((stats.cc / 100.0) + fairyCc, 1.00);
+  // Fairy caps total CC at 80% (0.80). Without fairy (fairyLvl=0), gear CC can scale to 100% (1.00).
+  const maxCcCap = (fairyLvl > 0) ? 0.80 : 1.00;
+  const realCc = Math.min((stats.cc / 100.0) + fairyCc, maxCcCap);
   const realCd = 1.20 + (stats.cd / 100.0);
 
   const timing = getAttackTiming(stats.as);
@@ -362,11 +365,12 @@ function calculateEffectiveQuality(itemStr, isWeapon, oldStats, newStats, fairyL
         } else if (tag === 'cc') {
           const oldFBl = Math.floor(oldStats.sd / 15.0);
           const oldFCC = Math.min(oldFBl * (fairyLvl / 100.0), 0.80) * 100.0;
-          const oldRealCc = Math.min(oldStats.cc + oldFCC, 100.0);
+          const maxCc = (fairyLvl > 0) ? 80.0 : 100.0;
+          const oldRealCc = Math.min(oldStats.cc + oldFCC, maxCc);
 
           const newFBl = Math.floor(newStats.sd / 15.0);
           const newFCC = Math.min(newFBl * (fairyLvl / 100.0), 0.80) * 100.0;
-          const newRealCc = Math.min(newStats.cc + newFCC, 100.0);
+          const newRealCc = Math.min(newStats.cc + newFCC, maxCc);
 
           effVal = newRealCc - oldRealCc;
         } else if (tag === 'dc') {
@@ -493,7 +497,10 @@ function loadState() {
       if (data && typeof data === 'object') {
         const version = data.format_version || 1;
         appState.fairy_lvl = parseFloat(data.fairy_lvl) || 11.0;
-        appState.target_build = data.target_build || "Post-Quantum Ranged";
+        let loadedTarget = data.target_build || "Post-Quantum Ranged (Fairy)";
+        if (loadedTarget === "Post-Quantum Ranged") loadedTarget = "Post-Quantum Ranged (Fairy)";
+        if (!BENCHMARKS[loadedTarget]) loadedTarget = "Post-Quantum Ranged (Fairy)";
+        appState.target_build = loadedTarget;
         appState.items = Array.isArray(data.items) ? data.items : DEFAULT_STATE.items;
         appState.mount_storage = Array.isArray(data.mount_storage) ? data.mount_storage : DEFAULT_STATE.mount_storage;
         appState.pet_storage = Array.isArray(data.pet_storage) ? data.pet_storage : DEFAULT_STATE.pet_storage;
@@ -529,7 +536,7 @@ function updateUI() {
   const realTotalHp = core.totalHp * (1.0 + (core.stats.hp / 100.0));
   const realHps = (realDps * (core.stats.ls / 100.0)) + (realTotalHp * (core.stats.hr / 100.0));
 
-  const targetMult = BENCHMARKS[appState.target_build] || 18.7;
+  const targetMult = BENCHMARKS[appState.target_build] || 38.5;
   const matchProg = (multObj.dpsMult / targetMult) * 100.0;
 
   // Desktop Hero stats
@@ -560,7 +567,8 @@ function updateUI() {
   updateProgressBar('dc', core.stats.dc, 100.0);
   updateProgressBar('ls', core.stats.ls, 100.0, false, `${core.stats.ls.toFixed(1)}% (Min 30.0%)`);
   updateProgressBar('sd', core.stats.sd, 150.0, false, `${core.stats.sd.toFixed(1)}% -> ${multObj.fairyBlocks} Fairy blocks`);
-  updateProgressBar('cc', multObj.realCc * 100.0, 100.0, false, `${(multObj.realCc * 100.0).toFixed(1)}% (Gear: ${core.stats.cc.toFixed(1)}%)`);
+  const ccCapPercent = (appState.fairy_lvl > 0) ? 80.0 : 100.0;
+  updateProgressBar('cc', multObj.realCc * 100.0, ccCapPercent, false, `${(multObj.realCc * 100.0).toFixed(1)}% / ${ccCapPercent.toFixed(0)}% (Gear: ${core.stats.cc.toFixed(1)}%)`);
 
   // Render Gear Grid (Slots 1-8)
   for (let i = 0; i < 8; i++) {
@@ -1018,7 +1026,7 @@ function runSimulationWithStorage() {
   const dpsSign = dpsDiff >= 0 ? "+" : "";
   const hpsSign = hpsDiff >= 0 ? "+" : "";
 
-  const targetMult = BENCHMARKS[appState.target_build] || 18.7;
+  const targetMult = BENCHMARKS[appState.target_build] || 38.5;
   const newMatchProg = (bestMult / targetMult) * 100.0;
 
   // Criteria for recommendation: composite score increases and DPS does not regress (> 98%)
@@ -1395,7 +1403,10 @@ function handleJsonImport() {
 
     const version = data.format_version || 1;
     appState.fairy_lvl = parseFloat(data.fairy_lvl) || 11.0;
-    appState.target_build = data.target_build || "Post-Quantum Ranged";
+    let impTarget = data.target_build || "Post-Quantum Ranged (Fairy)";
+    if (impTarget === "Post-Quantum Ranged") impTarget = "Post-Quantum Ranged (Fairy)";
+    if (!BENCHMARKS[impTarget]) impTarget = "Post-Quantum Ranged (Fairy)";
+    appState.target_build = impTarget;
     appState.items = Array.isArray(data.items) ? data.items : DEFAULT_STATE.items;
     appState.mount_storage = Array.isArray(data.mount_storage) ? data.mount_storage : DEFAULT_STATE.mount_storage;
     appState.pet_storage = Array.isArray(data.pet_storage) ? data.pet_storage : DEFAULT_STATE.pet_storage;
@@ -1450,6 +1461,13 @@ window.addEventListener('DOMContentLoaded', () => {
   targetSelect.value = appState.target_build;
   targetSelect.addEventListener('change', (e) => {
     appState.target_build = e.target.value;
+    if (appState.target_build === "Post-Quantum Ranged (No Fairy)" && appState.fairy_lvl > 0) {
+      appState.fairy_lvl = 0.0;
+      fairyInp.value = 0;
+    } else if (appState.target_build === "Post-Quantum Ranged (Fairy)" && appState.fairy_lvl === 0) {
+      appState.fairy_lvl = 20.0;
+      fairyInp.value = 20;
+    }
     updateUI();
   });
 

@@ -400,8 +400,15 @@
           </div>
           <p style="font-size:0.78rem; color:#bdc3c7;">Any Attack Speed above 150.1% that fails to hit the next tier is penalized in quality scoring as wasted stats.</p>
 
-          <h5 style="color:#2ecc71; margin-top: 10px; font-size: 0.88rem;">Fairy Mira (Crit Fairy)</h5>
-          <p>Every 15% Skill Damage (SD) grants 1 Fairy Block. Each block converts to Crit Chance based on your Fairy Level (capped at 80% bonus CC).</p>
+          <h5 style="color:#2ecc71; margin-top: 10px; font-size: 0.88rem;">Fairy Mira (Crit Fairy) & 80% CC Hard Cap</h5>
+          <p>Every 15% Skill Damage (SD) grants 1 Fairy Block. Each block converts to Crit Chance based on your Fairy Level (scales up to lvl 20: 20% CC per 15% SD). <b>Note:</b> When the Fairy is active, total Crit Chance (Fairy CC + Item CC) is strictly hard-capped at <b>80%</b>. Without a fairy, raw gear Crit Chance can reach up to 100%.</p>
+
+          <h5 style="color:#3498db; margin-top: 10px; font-size: 0.88rem;">Target Build Godroll Ceilings</h5>
+          <ul style="padding-left: 20px; margin-top: 4px; font-size: 0.82rem;">
+            <li><b>Post-Quantum Ranged (Fairy) [38.5x Ceiling]:</b> Optimal end-game setup with Level 20 Fairy. 60% SD provides the full 80% CC cap, freeing 5–7 gear slots for pure Crit Damage and Amplification.</li>
+            <li><b>Post-Quantum Ranged (No Fairy) [22.3x Ceiling]:</b> Designed for players bypassing the 60-day fairy reset. All Crit Chance must be rolled on gear, placing the theoretical ceiling at 22.3x.</li>
+            <li><b>Post-Quantum Melee [40.6x]:</b> Heavy Melee build leveraging high Melee DMG amplification.</li>
+          </ul>
 
           <h5 style="color:#e74c3c; margin-top: 10px; font-size: 0.88rem;">Survival Protocol (Lifesteal)</h5>
           <p>A minimum of <b>30% Lifesteal (LS)</b> is strictly required by the simulator to ensure late-game dungeon survival.</p>
@@ -422,7 +429,13 @@
         <button class="btn-close btn-close-modal">✕</button>
       </div>
       <div class="modal-body" style="font-size: 0.85rem; line-height: 1.5; color: #ecf0f1;">
-        <h4 style="color:#e67e22;">Mobile & Desktop Responsive Layout Update:</h4>
+        <h4 style="color:#e67e22;">Godbuild Ceilings & No-Fairy Mode:</h4>
+        <ul style="padding-left: 20px; margin-top: 4px;">
+          <li><b>New Target: Post-Quantum Ranged (No Fairy) [22.3x]:</b> Accurate benchmark for non-fairy builds without the 60-day resetting fairy.</li>
+          <li><b>Updated Ceiling: Post-Quantum Ranged (Fairy) [38.5x]:</b> Recalculated with Level 20 Mira Fairy and 80% total CC hard-cap.</li>
+          <li><b>Smart Target Switching:</b> Choosing the "No Fairy" target automatically sets Fairy Level to 0 to prevent accidental phantom bonuses.</li>
+        </ul>
+        <h4 style="color:#3498db; margin-top: 10px;">Mobile & Desktop Responsive Layout Update:</h4>
         <ul style="padding-left: 20px; margin-top: 4px;">
           <li><b>Responsive 2-Column Desktop View:</b> Equipment & Pets on the left, Hero stats and Saturation on the right. Zero horizontal stretching!</li>
           <li><b>Sticky Mobile Bar:</b> Compact header keeping your live DPS & HPS visible as you scroll on phones.</li>
