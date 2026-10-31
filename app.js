@@ -1403,7 +1403,7 @@ function saveStorageItem() {
   }
 
   saveState();
-  closeModals();
+  closeStorageItemModal();
   renderStorageLists();
 }
 
@@ -1698,6 +1698,11 @@ function copyJsonToClipboard() {
   });
 }
 
+function closeStorageItemModal() {
+  const itemModal = document.getElementById('storage-item-modal');
+  if (itemModal) itemModal.classList.add('hidden');
+}
+
 function closeModals() {
   document.querySelectorAll('.modal-overlay').forEach(m => m.classList.add('hidden'));
 }
@@ -1796,12 +1801,18 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // Close modals on click background or close button
-  document.querySelectorAll('.btn-close-modal').forEach(btn => {
-    btn.addEventListener('click', closeModals);
-  });
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    const closeBtn = overlay.querySelector('.btn-close-modal');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        overlay.classList.add('hidden');
+      });
+    }
+
     overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeModals();
+      if (e.target === overlay) {
+        overlay.classList.add('hidden');
+      }
     });
   });
 
