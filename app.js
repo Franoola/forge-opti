@@ -58,7 +58,8 @@ const MAX_ROLLS = {
 const BENCHMARKS = {
   "Post-Quantum Ranged (Fairy)": 38.5,
   "Post-Quantum Ranged (No Fairy)": 22.3,
-  "Post-Quantum Melee": 40.6,
+  "Post-Quantum Melee (Fairy)": 95.0,
+  "Post-Quantum Melee (No Fairy)": 52.0,
   "Pre-Quantum Melee": 9.0
 };
 
@@ -78,7 +79,7 @@ const BPS = [
 
 const DEFAULT_STATE = {
   format_version: 2,
-  fairy_lvl: 11.0,
+  fairy_lvl: 20.0,
   target_build: "Post-Quantum Ranged (Fairy)",
   items: [
     "Primitive, 2970000h, 25.6as, 19.4sd",
@@ -116,6 +117,7 @@ const DEFAULT_STATE = {
 // Global Application State
 let appState = JSON.parse(JSON.stringify(DEFAULT_STATE));
 let activeStorageCombo = null;
+let activeRiskStorageCombo = null;
 
 // --- Helper Functions ---
 
@@ -344,7 +346,7 @@ function calculateBuildScore(realDps, realHp, realHps) {
   return realDps * compositeWeight;
 }
 
-function calculateEffectiveQuality(itemStr, isWeapon, oldStats, newStats, fairyLvl) {
+function calculateEffectiveQuality(itemStr, isWeapon, oldStats, newStats, fairyLvl, weaponType = 'R') {
   const { cleanStr } = parseItemRarity(itemStr, isWeapon);
   const parts = cleanStr.split(",").map(p => p.trim());
 
@@ -358,30 +360,71 @@ function calculateEffectiveQuality(itemStr, isWeapon, oldStats, newStats, fairyL
       const tag = m[2];
       if (MAX_ROLLS[tag] !== undefined) {
         let effVal = val;
+
+        // 1. Melee DMG is 100% useless on Ranged weapons; capped at 350% on Melee
         if (tag === 'md') {
-          effVal = Math.min(newStats.md, 350.0) - Math.min(oldStats.md, 350.0);
-        } else if (tag === 'rd') {
-          effVal = Math.min(newStats.rd, 100.0) - Math.min(oldStats.rd, 100.0);
-        } else if (tag === 'cc') {
-          const oldFBl = Math.floor(oldStats.sd / 15.0);
-          const oldFCC = Math.min(oldFBl * (fairyLvl / 100.0), 0.80) * 100.0;
+          if (weaponType !== 'M') {
+            effVal = 0.0;
+          } else {
+            effVal = Math.min(newStats.md, 350.0) - Math.min(oldStats.md, 350.0);
+          }
+        }
+        // 2. Ranged DMG is 100% useless on Melee weapons; uncapped on Ranged
+        else if (tag === 'rd') {
+          if (weaponType !== 'R') {
+            effVal = 0.0;
+          } else {
+            effVal = Math.max(0.0, newStats.rd - oldStats.rd);
+          }
+        }
+        // 3. Crit Chance: capped at 80% with fairy, 100% without fairy
+        else if (tag === 'cc') {
           const maxCc = (fairyLvl > 0) ? 80.0 : 100.0;
+          const oldFBl = Math.floor(oldStats.sd / 15.0);
+          const oldFCC = (fairyLvl > 0) ? Math.min(oldFBl * (fairyLvl / 100.0), 0.80) * 100.0 : 0.0;
           const oldRealCc = Math.min(oldStats.cc + oldFCC, maxCc);
 
           const newFBl = Math.floor(newStats.sd / 15.0);
-          const newFCC = Math.min(newFBl * (fairyLvl / 100.0), 0.80) * 100.0;
+          const newFCC = (fairyLvl > 0) ? Math.min(newFBl * (fairyLvl / 100.0), 0.80) * 100.0 : 0.0;
           const newRealCc = Math.min(newStats.cc + newFCC, maxCc);
 
           effVal = newRealCc - oldRealCc;
-        } else if (tag === 'dc') {
+        }
+        // 4. Skill Damage: 100% useless without Fairy; capped once total CC reaches 80%
+        else if (tag === 'sd') {
+          if (fairyLvl <= 0) {
+            effVal = 0.0;
+          } else {
+            const oldFBl = Math.floor(oldStats.sd / 15.0);
+            const oldFCC = Math.min(oldFBl * (fairyLvl / 100.0), 0.80) * 100.0;
+            const oldRealCc = Math.min(oldStats.cc + oldFCC, 80.0);
+
+            const newFBl = Math.floor(newStats.sd / 15.0);
+            const newFCC = Math.min(newFBl * (fairyLvl / 100.0), 0.80) * 100.0;
+            const newRealCc = Math.min(newStats.cc + newFCC, 80.0);
+
+            const ccGain = Math.max(0.0, newRealCc - oldRealCc);
+            if (ccGain <= 0.0) {
+              effVal = 0.0;
+            } else {
+              // Convert effective CC gain back to utilized SD roll equivalent
+              effVal = Math.min(val, (ccGain / (fairyLvl / 100.0)) * 15.0);
+            }
+          }
+        }
+        // 5. Double Chance: capped at 100%
+        else if (tag === 'dc') {
           effVal = Math.min(newStats.dc, 100.0) - Math.min(oldStats.dc, 100.0);
-        } else if (tag === 'as') {
+        }
+        // 6. Attack Speed: only useful if it hits a lower attack interval breakpoint
+        else if (tag === 'as') {
           const oldInt = getAttackTiming(oldStats.as).interval;
           const newInt = getAttackTiming(newStats.as).interval;
-          if (newStats.as > 150.1 && newInt >= oldInt) {
+          if (newInt >= oldInt) {
             effVal = 0.0;
           }
         }
+
         effVal = Math.max(effVal, 0.0);
         effVal = Math.min(effVal, val);
         const score = Math.min(effVal / MAX_ROLLS[tag], 1.0);
@@ -435,7 +478,8 @@ function simulateDpsWithItem(slotIdx, testItem) {
   const mounts = [...appState.mount_storage];
   const pets = [...appState.pet_storage];
 
-  if (mounts.length > 0 && pets.length >= 3) {
+  // Only auto-adjust storage mounts/pets if calibrating Forge items (slots 0..7)
+  if (slotIdx < 8 && mounts.length > 0 && pets.length >= 3) {
     const petCombos = combinations(pets, 3);
     for (const m of mounts) {
       for (const pCombo of petCombos) {
@@ -477,7 +521,7 @@ function simulateDpsWithItem(slotIdx, testItem) {
 
   let itemQuality = 0.0;
   if (testItem !== null) {
-    itemQuality = calculateEffectiveQuality(testItem, slotIdx === 5, oldCore.stats, newCore.stats, appState.fairy_lvl);
+    itemQuality = calculateEffectiveQuality(testItem, slotIdx === 5, oldCore.stats, newCore.stats, appState.fairy_lvl, oldCore.weaponType);
   }
 
   return {
@@ -499,6 +543,7 @@ function loadState() {
         appState.fairy_lvl = parseFloat(data.fairy_lvl) || 11.0;
         let loadedTarget = data.target_build || "Post-Quantum Ranged (Fairy)";
         if (loadedTarget === "Post-Quantum Ranged") loadedTarget = "Post-Quantum Ranged (Fairy)";
+        if (loadedTarget === "Post-Quantum Melee") loadedTarget = "Post-Quantum Melee (Fairy)";
         if (!BENCHMARKS[loadedTarget]) loadedTarget = "Post-Quantum Ranged (Fairy)";
         appState.target_build = loadedTarget;
         appState.items = Array.isArray(data.items) ? data.items : DEFAULT_STATE.items;
@@ -565,7 +610,8 @@ function updateUI() {
   updateProgressBar('as', asVal, 400.1, false, asText);
 
   updateProgressBar('dc', core.stats.dc, 100.0);
-  updateProgressBar('ls', core.stats.ls, 100.0, false, `${core.stats.ls.toFixed(1)}% (Min 30.0%)`);
+  const lsText = core.stats.ls < 30.0 ? `${core.stats.ls.toFixed(1)}% (⚠️ Below 30% Risk)` : `${core.stats.ls.toFixed(1)}% (Min 30.0%)`;
+  updateProgressBar('ls', core.stats.ls, 100.0, false, lsText);
   updateProgressBar('sd', core.stats.sd, 150.0, false, `${core.stats.sd.toFixed(1)}% -> ${multObj.fairyBlocks} Fairy blocks`);
   const ccCapPercent = (appState.fairy_lvl > 0) ? 80.0 : 100.0;
   updateProgressBar('cc', multObj.realCc * 100.0, ccCapPercent, false, `${(multObj.realCc * 100.0).toFixed(1)}% / ${ccCapPercent.toFixed(0)}% (Gear: ${core.stats.cc.toFixed(1)}%)`);
@@ -605,6 +651,10 @@ function updateProgressBar(key, cur, cap, isCut = false, customText = null) {
     fill.style.backgroundColor = '#dc3545';
     lbl.textContent = `${cur.toFixed(1)}% [CUT]`;
     lbl.style.color = '#dc3545';
+  } else if (key === 'ls' && cur < 30.0) {
+    fill.style.backgroundColor = '#e67e22';
+    lbl.style.color = '#f39c12';
+    lbl.textContent = customText ? customText : `${cur.toFixed(1)}% / ${cap.toFixed(1)}%`;
   } else {
     fill.style.backgroundColor = pct >= 100.0 ? '#dc3545' : (pct > 0 ? '#28a745' : '#1f538d');
     lbl.style.color = '#ffffff';
@@ -795,7 +845,10 @@ function runMarginalSimulation() {
   const sign = dpsDiff >= 0 ? "+" : "";
 
   let dpsColor = dpsDiff > 0 ? "#28a745" : (dpsDiff < 0 ? "#dc3545" : "#bdc3c7");
-  let lsWarning = res.newLs < 30.0 ? `<div style="color:#dc3545; font-weight:bold; margin-top:4px;">⚠️ WARNING: Lifesteal falls below 30% (${res.newLs.toFixed(1)}%)!</div>` : "";
+  let lsWarning = res.newLs < 30.0 ? `
+    <div class="risk-warning-banner">
+      ⚠️ LIFESTEAL BELOW 30% TAKE AT OWN RISK (${res.newLs.toFixed(1)}%)
+    </div>` : "";
 
   let petReopt = "";
   if (res.bestCombo) {
@@ -808,7 +861,7 @@ function runMarginalSimulation() {
         DPS: ${res.newRealDps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${sign}${dpsDiff.toFixed(1)}%)
       </div>
       <div style="font-size:13px; color:#bdc3c7; margin-top:2px;">
-        Eff. Mult: ${res.newMult.toFixed(2)}x (was ${res.oldMult.toFixed(2)}x) | HPS: ${res.newRealHps.toLocaleString('en-US', { maximumFractionDigits: 1 })}
+        Eff. Mult: ${res.newMult.toFixed(2)}x (was ${res.oldMult.toFixed(2)}x) | HPS: ${res.newRealHps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | LS: ${res.newLs.toFixed(1)}%
       </div>
       <div style="font-size:13px; color:#3498db; margin-top:2px;">
         Item Quality Score: ${res.itemQuality.toFixed(1)}%
@@ -820,225 +873,13 @@ function runMarginalSimulation() {
 }
 
 
-function runSimulationWithStorage() {
-  const isWeapon = (currentCalibrationSlot === 5);
-  const isHybrid = (currentCalibrationSlot >= 8);
-  const testItemStr = constructItemStringFromCalibrationForm(isWeapon, isHybrid);
-
-  // 1. Current Baseline stats
-  const currCore = computeCoreStats(appState.items);
-  const currMultObj = computeMultipliers(currCore.stats, currCore.weaponType, appState.fairy_lvl);
-  const currDps = currCore.totalDmg * currMultObj.dpsMult;
-  const currHp = currCore.totalHp * (1.0 + (currCore.stats.hp / 100.0));
-  const currHps = (currDps * (currCore.stats.ls / 100.0)) + (currHp * (currCore.stats.hr / 100.0));
-  const currLs = currCore.stats.ls;
-  const currScore = calculateBuildScore(currDps, currHp, currHps);
-
-  // 2. Base test build with new item in currentCalibrationSlot
-  const tempBuild = [...appState.items];
-  tempBuild[currentCalibrationSlot] = testItemStr;
-
-  // 3. Candidate Mounts
-  let candidateMounts = [];
-  if (currentCalibrationSlot === 8) {
-    candidateMounts = [testItemStr];
-  } else {
-    const mSet = new Set();
-    if (tempBuild[8]) mSet.add(tempBuild[8]);
-    for (const m of appState.mount_storage) {
-      if (m) mSet.add(m);
-    }
-    candidateMounts = Array.from(mSet);
-    if (candidateMounts.length === 0) candidateMounts = [tempBuild[8] || ""];
-  }
-
-  // 4. Candidate Combinations & Optimization Loop
-  let bestCombo = null;
-  let bestScore = -1.0;
-  let bestDps = 0.0;
-  let bestMult = 0.0;
-  let bestHp = 0.0;
-  let bestHps = 0.0;
-  let bestLs = 0.0;
-
-  // Check testBuild as-is first (without any storage swaps)
-  const noSwapCore = computeCoreStats(tempBuild);
-  const noSwapMult = computeMultipliers(noSwapCore.stats, noSwapCore.weaponType, appState.fairy_lvl);
-  const noSwapDps = noSwapCore.totalDmg * noSwapMult.dpsMult;
-  const noSwapHp = noSwapCore.totalHp * (1.0 + (noSwapCore.stats.hp / 100.0));
-  const noSwapHps = (noSwapDps * (noSwapCore.stats.ls / 100.0)) + (noSwapHp * (noSwapCore.stats.hr / 100.0));
-  const noSwapScore = calculateBuildScore(noSwapDps, noSwapHp, noSwapHps);
-
-  if (noSwapCore.stats.ls >= 30.0) {
-    bestScore = noSwapScore;
-    bestDps = noSwapDps;
-    bestMult = noSwapMult.dpsMult;
-    bestHp = noSwapHp;
-    bestHps = noSwapHps;
-    bestLs = noSwapCore.stats.ls;
-    bestCombo = [tempBuild[8] || "", tempBuild[9] || "", tempBuild[10] || "", tempBuild[11] || ""];
-  }
-
-  if (currentCalibrationSlot >= 9) {
-    // Calibrating a specific pet slot (9, 10, or 11):
-    // testItemStr is mandatory as one of the pets.
-    const otherCandidatePets = [];
-    for (let pIdx = 9; pIdx <= 11; pIdx++) {
-      if (pIdx !== currentCalibrationSlot && tempBuild[pIdx]) {
-        otherCandidatePets.push(tempBuild[pIdx]);
-      }
-    }
-    for (const sp of appState.pet_storage) {
-      if (sp) otherCandidatePets.push(sp);
-    }
-
-    const petCombos = otherCandidatePets.length >= 2 ? combinations(otherCandidatePets, 2) : [];
-    for (const m of candidateMounts) {
-      if (petCombos.length > 0) {
-        for (const [pA, pB] of petCombos) {
-          const trial = [...tempBuild];
-          trial[8] = m;
-          trial[9] = testItemStr;
-          trial[10] = pA;
-          trial[11] = pB;
-
-          const c = computeCoreStats(trial);
-          const mObj = computeMultipliers(c.stats, c.weaponType, appState.fairy_lvl);
-          const d = c.totalDmg * mObj.dpsMult;
-          const h = c.totalHp * (1.0 + (c.stats.hp / 100.0));
-          const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
-          const score = calculateBuildScore(d, h, hps);
-
-          if (c.stats.ls >= 30.0 && score > bestScore) {
-            bestScore = score;
-            bestDps = d;
-            bestMult = mObj.dpsMult;
-            bestHp = h;
-            bestHps = hps;
-            bestLs = c.stats.ls;
-            bestCombo = [m, testItemStr, pA, pB];
-          }
-        }
-      } else {
-        const trial = [...tempBuild];
-        trial[8] = m;
-        const c = computeCoreStats(trial);
-        const mObj = computeMultipliers(c.stats, c.weaponType, appState.fairy_lvl);
-        const d = c.totalDmg * mObj.dpsMult;
-        const h = c.totalHp * (1.0 + (c.stats.hp / 100.0));
-        const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
-        const score = calculateBuildScore(d, h, hps);
-
-        if (c.stats.ls >= 30.0 && score > bestScore) {
-          bestScore = score;
-          bestDps = d;
-          bestMult = mObj.dpsMult;
-          bestHp = h;
-          bestHps = hps;
-          bestLs = c.stats.ls;
-          bestCombo = [m, trial[9] || "", trial[10] || "", trial[11] || ""];
-        }
-      }
-    }
-  } else {
-    // Calibrating Slots 0..8 (Forge item or Mount)
-    const candidatePetPool = [];
-    for (let pIdx = 9; pIdx <= 11; pIdx++) {
-      if (tempBuild[pIdx]) candidatePetPool.push(tempBuild[pIdx]);
-    }
-    for (const sp of appState.pet_storage) {
-      if (sp) candidatePetPool.push(sp);
-    }
-
-    const petCombos = candidatePetPool.length >= 3 ? combinations(candidatePetPool, 3) : [];
-
-    for (const m of candidateMounts) {
-      if (petCombos.length > 0) {
-        for (const [p0, p1, p2] of petCombos) {
-          const trial = [...tempBuild];
-          trial[8] = m;
-          trial[9] = p0;
-          trial[10] = p1;
-          trial[11] = p2;
-
-          const c = computeCoreStats(trial);
-          const mObj = computeMultipliers(c.stats, c.weaponType, appState.fairy_lvl);
-          const d = c.totalDmg * mObj.dpsMult;
-          const h = c.totalHp * (1.0 + (c.stats.hp / 100.0));
-          const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
-          const score = calculateBuildScore(d, h, hps);
-
-          if (c.stats.ls >= 30.0 && score > bestScore) {
-            bestScore = score;
-            bestDps = d;
-            bestMult = mObj.dpsMult;
-            bestHp = h;
-            bestHps = hps;
-            bestLs = c.stats.ls;
-            bestCombo = [m, p0, p1, p2];
-          }
-        }
-      } else {
-        const trial = [...tempBuild];
-        trial[8] = m;
-        const c = computeCoreStats(trial);
-        const mObj = computeMultipliers(c.stats, c.weaponType, appState.fairy_lvl);
-        const d = c.totalDmg * mObj.dpsMult;
-        const h = c.totalHp * (1.0 + (c.stats.hp / 100.0));
-        const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
-        const score = calculateBuildScore(d, h, hps);
-
-        if (c.stats.ls >= 30.0 && score > bestScore) {
-          bestScore = score;
-          bestDps = d;
-          bestMult = mObj.dpsMult;
-          bestHp = h;
-          bestHps = hps;
-          bestLs = c.stats.ls;
-          bestCombo = [m, trial[9] || "", trial[10] || "", trial[11] || ""];
-        }
-      }
-    }
-  }
-
-  // 5. Verdict and Results
-  const container = document.getElementById('sim-swap-result');
-
-  if (!bestCombo || bestLs < 30.0) {
-    const reachableLs = noSwapCore.stats.ls.toFixed(1);
-    container.innerHTML = `
-      <div class="sim-verdict-card verdict-reject">
-        <div class="verdict-header">
-          <span class="verdict-badge reject">⚠️ REJECT: LIFESTEAL &lt; 30%</span>
-          <span class="verdict-diff">SURVIVAL FAILED</span>
-        </div>
-        <div class="verdict-stats">
-          <div><strong>Lifesteal:</strong> ${reachableLs}% (Threshold: &ge; 30.0%)</div>
-          <div><strong>Reason:</strong> Even testing all pet & mount storage combinations, Lifesteal cannot reach 30%. Taking this item breaks survival protocol!</div>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  const dpsDiff = currDps > 0 ? ((bestDps / currDps) - 1.0) * 100.0 : 0.0;
-  const hpsDiff = currHps > 0 ? ((bestHps / currHps) - 1.0) * 100.0 : 0.0;
-  const dpsSign = dpsDiff >= 0 ? "+" : "";
-  const hpsSign = hpsDiff >= 0 ? "+" : "";
-
-  const targetMult = BENCHMARKS[appState.target_build] || 38.5;
-  const newMatchProg = (bestMult / targetMult) * 100.0;
-
-  // Criteria for recommendation: composite score increases and DPS does not regress (> 98%)
-  const isUpgrade = (bestScore > currScore && bestDps >= currDps * 0.98);
-
-  // 6. Analyze required swaps
+function generateBuildSwapsHtml(combo, currentSlot) {
   const currentMount = appState.items[8] || "";
-  const winningMount = bestCombo[0] || "";
-  let mountChanged = (currentMount !== winningMount && currentCalibrationSlot !== 8);
+  const winningMount = combo[0] || "";
+  let mountChanged = (currentMount !== winningMount && currentSlot !== 8);
 
   const currPets = [appState.items[9] || "", appState.items[10] || "", appState.items[11] || ""];
-  const winningPets = [bestCombo[1] || "", bestCombo[2] || "", bestCombo[3] || ""];
+  const winningPets = [combo[1] || "", combo[2] || "", combo[3] || ""];
 
   // Pair up swapped pets
   const remainingWinning = [...winningPets];
@@ -1084,7 +925,7 @@ function runSimulationWithStorage() {
     }
   }
 
-  const swapsSectionHtml = hasSwaps ? `
+  return hasSwaps ? `
     <div class="swaps-section">
       <div class="swaps-title">⚡ REQUIRED STORAGE SWAPS:</div>
       ${swapsHtml}
@@ -1094,49 +935,335 @@ function runSimulationWithStorage() {
       <div class="swaps-none">✨ No pet or mount swaps required — your currently equipped loadout is already optimal!</div>
     </div>
   `;
+}
 
-  if (isUpgrade) {
+function runSimulationWithStorage() {
+  const isWeapon = (currentCalibrationSlot === 5);
+  const isHybrid = (currentCalibrationSlot >= 8);
+  const testItemStr = constructItemStringFromCalibrationForm(isWeapon, isHybrid);
+
+  // 1. Current Baseline stats
+  const currCore = computeCoreStats(appState.items);
+  const currMultObj = computeMultipliers(currCore.stats, currCore.weaponType, appState.fairy_lvl);
+  const currDps = currCore.totalDmg * currMultObj.dpsMult;
+  const currHp = currCore.totalHp * (1.0 + (currCore.stats.hp / 100.0));
+  const currHps = (currDps * (currCore.stats.ls / 100.0)) + (currHp * (currCore.stats.hr / 100.0));
+  const currScore = calculateBuildScore(currDps, currHp, currHps);
+
+  // 2. Base test build with new item in currentCalibrationSlot
+  const tempBuild = [...appState.items];
+  tempBuild[currentCalibrationSlot] = testItemStr;
+
+  // 3. Candidate Mounts
+  let candidateMounts = [];
+  if (currentCalibrationSlot === 8) {
+    candidateMounts = [testItemStr];
+  } else {
+    const mSet = new Set();
+    if (tempBuild[8]) mSet.add(tempBuild[8]);
+    for (const m of appState.mount_storage) {
+      if (m) mSet.add(m);
+    }
+    candidateMounts = Array.from(mSet);
+    if (candidateMounts.length === 0) candidateMounts = [tempBuild[8] || ""];
+  }
+
+  // 4. Optimization tracking: Safe (LS >= 30%) and Risk (LS < 30%)
+  let bestSafe = null;
+  let bestRisk = null;
+
+  function evaluateCandidate(combo, buildArr) {
+    const c = computeCoreStats(buildArr);
+    const mObj = computeMultipliers(c.stats, c.weaponType, appState.fairy_lvl);
+    const d = c.totalDmg * mObj.dpsMult;
+    const h = c.totalHp * (1.0 + (c.stats.hp / 100.0));
+    const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
+    const score = calculateBuildScore(d, h, hps);
+    const ls = c.stats.ls;
+
+    const cand = {
+      combo: [...combo],
+      score,
+      dps: d,
+      mult: mObj.dpsMult,
+      hp: h,
+      hps,
+      ls
+    };
+
+    if (ls >= 30.0) {
+      if (!bestSafe || score > bestSafe.score) {
+        bestSafe = cand;
+      }
+    } else {
+      // Risk candidate (LS < 30%): prioritize raw DPS!
+      if (!bestRisk || d > bestRisk.dps || (Math.abs(d - bestRisk.dps) < 1e-4 && score > bestRisk.score)) {
+        bestRisk = cand;
+      }
+    }
+  }
+
+  // Evaluate unswapped candidate
+  const initialCombo = [tempBuild[8] || "", tempBuild[9] || "", tempBuild[10] || "", tempBuild[11] || ""];
+  evaluateCandidate(initialCombo, tempBuild);
+
+  // Evaluate storage combinations
+  if (currentCalibrationSlot >= 9) {
+    const otherCandidatePets = [];
+    for (let pIdx = 9; pIdx <= 11; pIdx++) {
+      if (pIdx !== currentCalibrationSlot && tempBuild[pIdx]) {
+        otherCandidatePets.push(tempBuild[pIdx]);
+      }
+    }
+    for (const sp of appState.pet_storage) {
+      if (sp) otherCandidatePets.push(sp);
+    }
+
+    const petCombos = otherCandidatePets.length >= 2 ? combinations(otherCandidatePets, 2) : [];
+    for (const m of candidateMounts) {
+      if (petCombos.length > 0) {
+        for (const [pA, pB] of petCombos) {
+          const trial = [...tempBuild];
+          trial[8] = m;
+          trial[9] = testItemStr;
+          trial[10] = pA;
+          trial[11] = pB;
+          evaluateCandidate([m, testItemStr, pA, pB], trial);
+        }
+      } else {
+        const trial = [...tempBuild];
+        trial[8] = m;
+        evaluateCandidate([m, trial[9] || "", trial[10] || "", trial[11] || ""], trial);
+      }
+    }
+  } else {
+    const candidatePetPool = [];
+    for (let pIdx = 9; pIdx <= 11; pIdx++) {
+      if (tempBuild[pIdx]) candidatePetPool.push(tempBuild[pIdx]);
+    }
+    for (const sp of appState.pet_storage) {
+      if (sp) candidatePetPool.push(sp);
+    }
+
+    const petCombos = candidatePetPool.length >= 3 ? combinations(candidatePetPool, 3) : [];
+    for (const m of candidateMounts) {
+      if (petCombos.length > 0) {
+        for (const [p0, p1, p2] of petCombos) {
+          const trial = [...tempBuild];
+          trial[8] = m;
+          trial[9] = p0;
+          trial[10] = p1;
+          trial[11] = p2;
+          evaluateCandidate([m, p0, p1, p2], trial);
+        }
+      } else {
+        const trial = [...tempBuild];
+        trial[8] = m;
+        evaluateCandidate([m, trial[9] || "", trial[10] || "", trial[11] || ""], trial);
+      }
+    }
+  }
+
+  // 5. Verdict and Results
+  const container = document.getElementById('sim-swap-result');
+  const targetMult = BENCHMARKS[appState.target_build] || 38.5;
+
+  const hasHigherDpsRisk = (bestRisk !== null) && 
+    (bestSafe === null || bestRisk.dps > bestSafe.dps * 1.0001);
+
+  // Scenario 1: Both Safe Build and Higher DPS Glass-Cannon Build exist!
+  if (bestSafe && hasHigherDpsRisk && (bestRisk.dps >= currDps * 0.98)) {
+    const safeDpsDiff = currDps > 0 ? ((bestSafe.dps / currDps) - 1.0) * 100.0 : 0.0;
+    const safeHpsDiff = currHps > 0 ? ((bestSafe.hps / currHps) - 1.0) * 100.0 : 0.0;
+    const safeDpsSign = safeDpsDiff >= 0 ? "+" : "";
+    const safeHpsSign = safeHpsDiff >= 0 ? "+" : "";
+    const safeMatchProg = (bestSafe.mult / targetMult) * 100.0;
+    const safeSwapsHtml = generateBuildSwapsHtml(bestSafe.combo, currentCalibrationSlot);
+
+    const riskDpsDiff = currDps > 0 ? ((bestRisk.dps / currDps) - 1.0) * 100.0 : 0.0;
+    const riskHpsDiff = currHps > 0 ? ((bestRisk.hps / currHps) - 1.0) * 100.0 : 0.0;
+    const riskDpsSign = riskDpsDiff >= 0 ? "+" : "";
+    const riskHpsSign = riskHpsDiff >= 0 ? "+" : "";
+    const riskAdvantage = ((bestRisk.dps / bestSafe.dps) - 1.0) * 100.0;
+    const riskMatchProg = (bestRisk.mult / targetMult) * 100.0;
+    const riskSwapsHtml = generateBuildSwapsHtml(bestRisk.combo, currentCalibrationSlot);
+
     container.innerHTML = `
-      <div class="sim-verdict-card verdict-take">
-        <div class="verdict-header">
-          <span class="verdict-badge take">✅ VERDICT: TAKE THIS ITEM!</span>
-          <span class="verdict-diff">${dpsSign}${dpsDiff.toFixed(1)}% DPS</span>
+      <div class="dual-results-container">
+        <!-- Option A: Safe Build -->
+        <div class="sim-verdict-card verdict-take">
+          <div class="verdict-header">
+            <span class="verdict-badge take">🛡️ OPTION A: SAFE LOADOUT (LS ≥ 30%)</span>
+            <span class="verdict-diff">${safeDpsSign}${safeDpsDiff.toFixed(1)}% DPS</span>
+          </div>
+          <div class="verdict-stats">
+            <div><strong>New Real DPS:</strong> ${bestSafe.dps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (Current: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
+            <div><strong>Multiplier:</strong> ${bestSafe.mult.toFixed(2)}x | <strong>HPS:</strong> ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${safeHpsSign}${safeHpsDiff.toFixed(1)}%) | <strong>LS:</strong> ${bestSafe.ls.toFixed(1)}%</div>
+            <div><strong>Optimal Build Match:</strong> ${safeMatchProg.toFixed(1)}%</div>
+          </div>
+          ${safeSwapsHtml}
+          <button id="btn-apply-safe" class="btn-primary btn-apply-all">⚡ Equip Safe Build (LS ≥ 30%)</button>
         </div>
-        <div class="verdict-stats">
-          <div><strong>New Real DPS:</strong> ${bestDps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (was ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
-          <div><strong>Multiplier:</strong> ${bestMult.toFixed(2)}x | <strong>HPS:</strong> ${bestHps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${hpsSign}${hpsDiff.toFixed(1)}%) | <strong>LS:</strong> ${bestLs.toFixed(1)}%</div>
-          <div><strong>Optimal Build Match:</strong> ${newMatchProg.toFixed(1)}%</div>
+
+        <!-- Option B: Glass-Cannon Build -->
+        <div class="sim-verdict-card verdict-risk">
+          <div class="verdict-header">
+            <span class="verdict-badge risk">🔥 OPTION B: MAX DPS (GLASS CANNON)</span>
+            <span class="verdict-diff" style="color:#e67e22;">+${riskAdvantage.toFixed(1)}% vs Safe</span>
+          </div>
+          <div class="risk-warning-banner">⚠️ LIFESTEAL BELOW 30% TAKE AT OWN RISK (${bestRisk.ls.toFixed(1)}%)</div>
+          <div class="verdict-stats">
+            <div><strong>New Real DPS:</strong> ${bestRisk.dps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (${riskDpsSign}${riskDpsDiff.toFixed(1)}% vs Current)</div>
+            <div><strong>Multiplier:</strong> ${bestRisk.mult.toFixed(2)}x | <strong>HPS:</strong> ${bestRisk.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${riskHpsSign}${riskHpsDiff.toFixed(1)}%) | <strong>LS:</strong> ${bestRisk.ls.toFixed(1)}%</div>
+            <div><strong>Optimal Build Match:</strong> ${riskMatchProg.toFixed(1)}%</div>
+          </div>
+          ${riskSwapsHtml}
+          <button id="btn-apply-risk" class="btn-glass-cannon btn-apply-all">🔥 Equip Glass Cannon (Higher DPS, LS &lt; 30%)</button>
         </div>
-        ${swapsSectionHtml}
-        <button id="btn-apply-sim-all" class="btn-primary btn-apply-all">⚡ Equip Item & Apply Swaps</button>
       </div>
     `;
 
-    document.getElementById('btn-apply-sim-all').addEventListener('click', () => {
+    document.getElementById('btn-apply-safe').addEventListener('click', () => {
       appState.items[currentCalibrationSlot] = testItemStr;
-      appState.items[8] = bestCombo[0];
-      appState.items[9] = bestCombo[1];
-      appState.items[10] = bestCombo[2];
-      appState.items[11] = bestCombo[3];
+      appState.items[8] = bestSafe.combo[0];
+      appState.items[9] = bestSafe.combo[1];
+      appState.items[10] = bestSafe.combo[2];
+      appState.items[11] = bestSafe.combo[3];
       saveState();
       closeModals();
       updateUI();
     });
-  } else {
-    container.innerHTML = `
-      <div class="sim-verdict-card verdict-reject">
-        <div class="verdict-header">
-          <span class="verdict-badge reject">❌ VERDICT: DO NOT TAKE</span>
-          <span class="verdict-diff">${dpsSign}${dpsDiff.toFixed(1)}% DPS</span>
-        </div>
-        <div class="verdict-stats">
-          <div><strong>Best Possible DPS:</strong> ${bestDps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (Current: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
-          <div><strong>Reason:</strong> New item results in a weaker build (${dpsSign}${dpsDiff.toFixed(1)}% DPS). Storage pets & mount cannot compensate for the stat loss.</div>
-        </div>
-        ${hasSwaps ? swapsSectionHtml : ''}
-      </div>
-    `;
+
+    document.getElementById('btn-apply-risk').addEventListener('click', () => {
+      appState.items[currentCalibrationSlot] = testItemStr;
+      appState.items[8] = bestRisk.combo[0];
+      appState.items[9] = bestRisk.combo[1];
+      appState.items[10] = bestRisk.combo[2];
+      appState.items[11] = bestRisk.combo[3];
+      saveState();
+      closeModals();
+      updateUI();
+    });
+    return;
   }
+
+  // Scenario 2: Standard Safe Build
+  if (bestSafe) {
+    const dpsDiff = currDps > 0 ? ((bestSafe.dps / currDps) - 1.0) * 100.0 : 0.0;
+    const hpsDiff = currHps > 0 ? ((bestSafe.hps / currHps) - 1.0) * 100.0 : 0.0;
+    const dpsSign = dpsDiff >= 0 ? "+" : "";
+    const hpsSign = hpsDiff >= 0 ? "+" : "";
+    const newMatchProg = (bestSafe.mult / targetMult) * 100.0;
+    const isUpgrade = (bestSafe.score > currScore && bestSafe.dps >= currDps * 0.98);
+    const swapsHtml = generateBuildSwapsHtml(bestSafe.combo, currentCalibrationSlot);
+
+    if (isUpgrade) {
+      container.innerHTML = `
+        <div class="sim-verdict-card verdict-take">
+          <div class="verdict-header">
+            <span class="verdict-badge take">✅ VERDICT: TAKE THIS ITEM!</span>
+            <span class="verdict-diff">${dpsSign}${dpsDiff.toFixed(1)}% DPS</span>
+          </div>
+          <div class="verdict-stats">
+            <div><strong>New Real DPS:</strong> ${bestSafe.dps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (was ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
+            <div><strong>Multiplier:</strong> ${bestSafe.mult.toFixed(2)}x | <strong>HPS:</strong> ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${hpsSign}${hpsDiff.toFixed(1)}%) | <strong>LS:</strong> ${bestSafe.ls.toFixed(1)}%</div>
+            <div><strong>Optimal Build Match:</strong> ${newMatchProg.toFixed(1)}%</div>
+          </div>
+          ${swapsHtml}
+          <button id="btn-apply-sim-all" class="btn-primary btn-apply-all">⚡ Equip Item & Apply Swaps</button>
+        </div>
+      `;
+      document.getElementById('btn-apply-sim-all').addEventListener('click', () => {
+        appState.items[currentCalibrationSlot] = testItemStr;
+        appState.items[8] = bestSafe.combo[0];
+        appState.items[9] = bestSafe.combo[1];
+        appState.items[10] = bestSafe.combo[2];
+        appState.items[11] = bestSafe.combo[3];
+        saveState();
+        closeModals();
+        updateUI();
+      });
+    } else {
+      container.innerHTML = `
+        <div class="sim-verdict-card verdict-reject">
+          <div class="verdict-header">
+            <span class="verdict-badge reject">❌ VERDICT: DO NOT TAKE</span>
+            <span class="verdict-diff">${dpsSign}${dpsDiff.toFixed(1)}% DPS</span>
+          </div>
+          <div class="verdict-stats">
+            <div><strong>Best Possible DPS:</strong> ${bestSafe.dps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (Current: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
+            <div><strong>Reason:</strong> New item results in a weaker build (${dpsSign}${dpsDiff.toFixed(1)}% DPS). Storage pets & mount cannot compensate for the stat loss.</div>
+          </div>
+          ${swapsHtml}
+        </div>
+      `;
+    }
+    return;
+  }
+
+  // Scenario 3: No Safe Combo reached 30% LS, but Risk combo exists!
+  if (bestRisk) {
+    const dpsDiff = currDps > 0 ? ((bestRisk.dps / currDps) - 1.0) * 100.0 : 0.0;
+    const hpsDiff = currHps > 0 ? ((bestRisk.hps / currHps) - 1.0) * 100.0 : 0.0;
+    const dpsSign = dpsDiff >= 0 ? "+" : "";
+    const hpsSign = hpsDiff >= 0 ? "+" : "";
+    const newMatchProg = (bestRisk.mult / targetMult) * 100.0;
+    const isViable = (bestRisk.dps >= currDps * 0.98);
+    const swapsHtml = generateBuildSwapsHtml(bestRisk.combo, currentCalibrationSlot);
+
+    if (isViable) {
+      container.innerHTML = `
+        <div class="sim-verdict-card verdict-risk">
+          <div class="verdict-header">
+            <span class="verdict-badge risk">⚠️ VERDICT: TAKE AT OWN RISK (GLASS CANNON)</span>
+            <span class="verdict-diff">${dpsSign}${dpsDiff.toFixed(1)}% DPS</span>
+          </div>
+          <div class="risk-warning-banner">⚠️ LIFESTEAL BELOW 30% TAKE AT OWN RISK (${bestRisk.ls.toFixed(1)}%)</div>
+          <div class="verdict-stats">
+            <div><strong>New Real DPS:</strong> ${bestRisk.dps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (was ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
+            <div><strong>Multiplier:</strong> ${bestRisk.mult.toFixed(2)}x | <strong>HPS:</strong> ${bestRisk.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${hpsSign}${hpsDiff.toFixed(1)}%) | <strong>LS:</strong> ${bestRisk.ls.toFixed(1)}%</div>
+            <div><strong>Optimal Build Match:</strong> ${newMatchProg.toFixed(1)}%</div>
+          </div>
+          ${swapsHtml}
+          <button id="btn-apply-risk-only" class="btn-glass-cannon btn-apply-all">🔥 Equip Item & Apply Swaps (At Own Risk)</button>
+        </div>
+      `;
+      document.getElementById('btn-apply-risk-only').addEventListener('click', () => {
+        appState.items[currentCalibrationSlot] = testItemStr;
+        appState.items[8] = bestRisk.combo[0];
+        appState.items[9] = bestRisk.combo[1];
+        appState.items[10] = bestRisk.combo[2];
+        appState.items[11] = bestRisk.combo[3];
+        saveState();
+        closeModals();
+        updateUI();
+      });
+    } else {
+      container.innerHTML = `
+        <div class="sim-verdict-card verdict-reject">
+          <div class="verdict-header">
+            <span class="verdict-badge reject">❌ VERDICT: DO NOT TAKE</span>
+            <span class="verdict-diff">${dpsSign}${dpsDiff.toFixed(1)}% DPS</span>
+          </div>
+          <div class="risk-warning-banner">⚠️ LIFESTEAL BELOW 30% TAKE AT OWN RISK (${bestRisk.ls.toFixed(1)}%)</div>
+          <div class="verdict-stats">
+            <div><strong>Best Possible DPS:</strong> ${bestRisk.dps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (Current: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
+            <div><strong>Reason:</strong> New item results in a weaker build (${dpsSign}${dpsDiff.toFixed(1)}% DPS) even when dropping Lifesteal below 30%.</div>
+          </div>
+          ${swapsHtml}
+        </div>
+      `;
+    }
+    return;
+  }
+
+  // Fallback
+  container.innerHTML = `
+    <div class="sim-verdict-card verdict-reject">
+      <div class="verdict-header"><span class="verdict-badge reject">❌ ERROR</span></div>
+      <div class="verdict-stats"><div>No valid combination of mounts and pets could be evaluated.</div></div>
+    </div>
+  `;
 }
 
 function saveCalibrationToBuild() {
@@ -1282,13 +1409,25 @@ function saveStorageItem() {
 
 function runStorageOptimization() {
   const mounts = [...appState.mount_storage];
+  if (appState.items[8] && !mounts.includes(appState.items[8])) {
+    mounts.push(appState.items[8]);
+  }
+
   const pets = [...appState.pet_storage];
+  for (let pIdx = 9; pIdx <= 11; pIdx++) {
+    if (appState.items[pIdx] && !pets.includes(appState.items[pIdx])) {
+      pets.push(appState.items[pIdx]);
+    }
+  }
+
   const resLbl = document.getElementById('opti-result-lbl');
   const btnApply = document.getElementById('btn-apply-opti');
+  const btnApplyRisk = document.getElementById('btn-apply-risk-opti');
 
   if (mounts.length === 0 || pets.length < 3) {
-    resLbl.innerHTML = `<span style="color:#dc3545;">ERROR: You need at least 1 Mount and 3 Pets in storage!</span>`;
+    resLbl.innerHTML = `<span style="color:#dc3545;">ERROR: You need at least 1 Mount and 3 Pets (equipped or in storage)!</span>`;
     btnApply.disabled = true;
+    if (btnApplyRisk) btnApplyRisk.classList.add('hidden');
     return;
   }
 
@@ -1299,11 +1438,8 @@ function runStorageOptimization() {
   const currHps = (currDps * (currCore.stats.ls / 100.0)) + (currHp * (currCore.stats.hr / 100.0));
   const currScore = calculateBuildScore(currDps, currHp, currHps);
 
-  let bestCombo = null;
-  let bestScore = -1.0;
-  let bestDps = 0.0;
-  let bestMult = 0.0;
-  let bestHps = 0.0;
+  let bestSafe = null;
+  let bestRisk = null;
 
   const petCombos = combinations(pets, 3);
   for (const m of mounts) {
@@ -1320,33 +1456,107 @@ function runStorageOptimization() {
       const hp = c.totalHp * (1.0 + (c.stats.hp / 100.0));
       const hps = (dps * (c.stats.ls / 100.0)) + (hp * (c.stats.hr / 100.0));
       const score = calculateBuildScore(dps, hp, hps);
+      const ls = c.stats.ls;
 
-      if (c.stats.ls >= 30.0 && score > bestScore) {
-        bestScore = score;
-        bestDps = dps;
-        bestMult = mObj.dpsMult;
-        bestHps = hps;
-        bestCombo = [m, pCombo[0], pCombo[1], pCombo[2]];
+      const cand = {
+        combo: [m, pCombo[0], pCombo[1], pCombo[2]],
+        score,
+        dps,
+        mult: mObj.dpsMult,
+        hp,
+        hps,
+        ls
+      };
+
+      if (ls >= 30.0) {
+        if (!bestSafe || score > bestSafe.score) {
+          bestSafe = cand;
+        }
+      } else {
+        if (!bestRisk || dps > bestRisk.dps || (Math.abs(dps - bestRisk.dps) < 1e-4 && score > bestRisk.score)) {
+          bestRisk = cand;
+        }
       }
     }
   }
 
-  if (bestCombo) {
-    if (bestScore > currScore && (bestDps >= currDps * 0.98)) {
-      activeStorageCombo = bestCombo;
-      const dpsDiff = ((bestDps / currDps) - 1.0) * 100.0;
+  const hasHigherDpsRisk = (bestRisk !== null) && 
+    (bestSafe === null || bestRisk.dps > bestSafe.dps * 1.0001);
+
+  if (bestSafe && hasHigherDpsRisk && (bestRisk.dps >= currDps * 0.98)) {
+    activeStorageCombo = bestSafe.combo;
+    activeRiskStorageCombo = bestRisk.combo;
+
+    const safeDpsDiff = currDps > 0 ? ((bestSafe.dps / currDps) - 1.0) * 100.0 : 0.0;
+    const riskDpsDiff = currDps > 0 ? ((bestRisk.dps / currDps) - 1.0) * 100.0 : 0.0;
+    const riskAdvantage = ((bestRisk.dps / bestSafe.dps) - 1.0) * 100.0;
+
+    resLbl.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:12px; text-align:left;">
+        <!-- Safe Build Card -->
+        <div style="background:#1a252f; border:1px solid #2ecc71; border-radius:8px; padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:6px; margin-bottom:6px;">
+            <span style="color:#2ecc71; font-weight:800; font-size:14px;">🛡️ OPTION A: SAFE LOADOUT (LS ≥ 30%)</span>
+            <span style="font-weight:700; color:#ecf0f1; font-size:13px;">${safeDpsDiff >= 0 ? '+' : ''}${safeDpsDiff.toFixed(1)}% DPS</span>
+          </div>
+          <div style="font-size:12px; color:#bdc3c7; line-height:1.5;">
+            <div><b>DPS:</b> ${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>HPS:</b> ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>LS:</b> ${bestSafe.ls.toFixed(1)}% | <b>Mult:</b> ${bestSafe.mult.toFixed(2)}x</div>
+            <div style="margin-top:4px;"><b>Mount:</b> ${formatItemSummary(bestSafe.combo[0])}</div>
+            <div><b>Pets:</b> ${bestSafe.combo.slice(1).map(formatItemSummary).join(' | ')}</div>
+          </div>
+          <button id="btn-opti-card-safe" class="btn-primary" style="margin-top:8px; width:100%; padding:7px; font-size:13px;">⚡ Apply Safe Loadout</button>
+        </div>
+
+        <!-- Glass-Cannon Card -->
+        <div style="background:#241915; border:1px solid #e67e22; border-radius:8px; padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:6px; margin-bottom:6px;">
+            <span style="color:#e67e22; font-weight:800; font-size:14px;">🔥 OPTION B: MAX DPS (GLASS CANNON)</span>
+            <span style="font-weight:700; color:#f39c12; font-size:13px;">+${riskAdvantage.toFixed(1)}% vs Safe</span>
+          </div>
+          <div class="risk-warning-banner" style="margin:4px 0 8px 0; padding:6px;">⚠️ LIFESTEAL BELOW 30% TAKE AT OWN RISK (${bestRisk.ls.toFixed(1)}%)</div>
+          <div style="font-size:12px; color:#bdc3c7; line-height:1.5;">
+            <div><b>DPS:</b> ${bestRisk.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${riskDpsDiff >= 0 ? '+' : ''}${riskDpsDiff.toFixed(1)}% vs Current) | <b>HPS:</b> ${bestRisk.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>LS:</b> ${bestRisk.ls.toFixed(1)}%</div>
+            <div style="margin-top:4px;"><b>Mount:</b> ${formatItemSummary(bestRisk.combo[0])}</div>
+            <div><b>Pets:</b> ${bestRisk.combo.slice(1).map(formatItemSummary).join(' | ')}</div>
+          </div>
+          <button id="btn-opti-card-risk" class="btn-glass-cannon" style="margin-top:8px; width:100%; padding:7px; font-size:13px;">🔥 Apply Glass-Cannon Loadout</button>
+        </div>
+      </div>
+    `;
+
+    btnApply.textContent = "⚡ Apply Safe Loadout";
+    btnApply.disabled = false;
+    if (btnApplyRisk) {
+      btnApplyRisk.classList.remove('hidden');
+    }
+
+    document.getElementById('btn-opti-card-safe').addEventListener('click', applyOptimizedCombo);
+    document.getElementById('btn-opti-card-risk').addEventListener('click', applyRiskCombo);
+    return;
+  }
+
+  // If we only have Safe Build (or Risk build does not beat Safe in DPS):
+  if (btnApplyRisk) btnApplyRisk.classList.add('hidden');
+
+  if (bestSafe) {
+    activeStorageCombo = bestSafe.combo;
+    activeRiskStorageCombo = null;
+
+    if (bestSafe.score > currScore && (bestSafe.dps >= currDps * 0.98)) {
+      const dpsDiff = ((bestSafe.dps / currDps) - 1.0) * 100.0;
       const sign = dpsDiff >= 0 ? "+" : "";
       resLbl.innerHTML = `
         <div style="color:#28a745; font-weight:bold; font-size:15px;">FOUND BETTER ALL-AROUND COMBINATION!</div>
         <div style="margin-top:4px; color:#ecf0f1;">
-          Best DPS: <b>${bestDps.toLocaleString('en-US', { maximumFractionDigits: 1 })}</b> (${sign}${dpsDiff.toFixed(1)}%) | HPS: ${bestHps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | Mult: ${bestMult.toFixed(2)}x
+          Best DPS: <b>${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })}</b> (${sign}${dpsDiff.toFixed(1)}%) | HPS: ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | LS: ${bestSafe.ls.toFixed(1)}% | Mult: ${bestSafe.mult.toFixed(2)}x
         </div>
         <div style="font-size:12px; color:#bdc3c7; margin-top:2px;">
           Current DPS: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | Mult: ${currMultObj.dpsMult.toFixed(2)}x
         </div>
       `;
+      btnApply.textContent = "Apply to Build";
       btnApply.disabled = false;
-    } else if (Math.abs(bestScore - currScore) / (currScore + 1e-6) < 0.005 || (bestDps <= currDps && bestScore <= currScore)) {
+    } else if (Math.abs(bestSafe.score - currScore) / (currScore + 1e-6) < 0.005 || (bestSafe.dps <= currDps && bestSafe.score <= currScore)) {
       activeStorageCombo = null;
       resLbl.innerHTML = `
         <div style="color:#f39c12; font-weight:bold; font-size:15px;">CURRENT BUILD IS ALREADY OPTIMAL!</div>
@@ -1363,16 +1573,47 @@ function runStorageOptimization() {
       resLbl.innerHTML = `
         <div style="color:#dc3545; font-weight:bold; font-size:15px;">STORAGE IS WEAKER THAN CURRENT BUILD!</div>
         <div style="margin-top:4px; color:#ecf0f1;">
-          Best storage DPS: ${bestDps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (Current: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })}) | Mult: ${bestMult.toFixed(2)}x
+          Best storage DPS: ${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (Current: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })}) | Mult: ${bestSafe.mult.toFixed(2)}x
         </div>
       `;
       btnApply.disabled = true;
     }
-  } else {
-    activeStorageCombo = null;
-    resLbl.innerHTML = `<span style="color:#dc3545;">No valid combinations found (All drop LS < 30%).</span>`;
-    btnApply.disabled = true;
+    return;
   }
+
+  // If no Safe combo reaches 30% LS, but Risk combo exists:
+  if (bestRisk) {
+    activeStorageCombo = null;
+    activeRiskStorageCombo = bestRisk.combo;
+    const riskDpsDiff = currDps > 0 ? ((bestRisk.dps / currDps) - 1.0) * 100.0 : 0.0;
+
+    resLbl.innerHTML = `
+      <div style="background:#241915; border:1px solid #e67e22; border-radius:8px; padding:12px; text-align:left;">
+        <div style="color:#e67e22; font-weight:800; font-size:14px; margin-bottom:6px;">⚠️ NO COMBO REACHES 30% LS — BEST DPS LOADOUT:</div>
+        <div class="risk-warning-banner" style="margin:4px 0 8px 0; padding:6px;">⚠️ LIFESTEAL BELOW 30% TAKE AT OWN RISK (${bestRisk.ls.toFixed(1)}%)</div>
+        <div style="font-size:12px; color:#bdc3c7; line-height:1.5;">
+          <div><b>DPS:</b> ${bestRisk.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${riskDpsDiff >= 0 ? '+' : ''}${riskDpsDiff.toFixed(1)}% vs Current) | <b>HPS:</b> ${bestRisk.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>LS:</b> ${bestRisk.ls.toFixed(1)}%</div>
+          <div style="margin-top:4px;"><b>Mount:</b> ${formatItemSummary(bestRisk.combo[0])}</div>
+          <div><b>Pets:</b> ${bestRisk.combo.slice(1).map(formatItemSummary).join(' | ')}</div>
+        </div>
+        <button id="btn-opti-card-risk" class="btn-glass-cannon" style="margin-top:8px; width:100%; padding:7px; font-size:13px;">🔥 Apply Glass-Cannon Loadout</button>
+      </div>
+    `;
+
+    btnApply.disabled = true;
+    if (btnApplyRisk) {
+      btnApplyRisk.classList.remove('hidden');
+    }
+    document.getElementById('btn-opti-card-risk').addEventListener('click', applyRiskCombo);
+    return;
+  }
+
+  // Fallback
+  activeStorageCombo = null;
+  activeRiskStorageCombo = null;
+  resLbl.innerHTML = `<span style="color:#dc3545;">No valid combinations found.</span>`;
+  btnApply.disabled = true;
+  if (btnApplyRisk) btnApplyRisk.classList.add('hidden');
 }
 
 function applyOptimizedCombo() {
@@ -1387,7 +1628,17 @@ function applyOptimizedCombo() {
   }
 }
 
-// --- Import / Export Modal ---
+function applyRiskCombo() {
+  if (activeRiskStorageCombo) {
+    appState.items[8] = activeRiskStorageCombo[0];
+    appState.items[9] = activeRiskStorageCombo[1];
+    appState.items[10] = activeRiskStorageCombo[2];
+    appState.items[11] = activeRiskStorageCombo[3];
+    saveState();
+    updateUI();
+    closeModals();
+  }
+}
 
 function openImportExportModal() {
   document.getElementById('json-area').value = JSON.stringify(appState, null, 2);
@@ -1405,6 +1656,7 @@ function handleJsonImport() {
     appState.fairy_lvl = parseFloat(data.fairy_lvl) || 11.0;
     let impTarget = data.target_build || "Post-Quantum Ranged (Fairy)";
     if (impTarget === "Post-Quantum Ranged") impTarget = "Post-Quantum Ranged (Fairy)";
+    if (impTarget === "Post-Quantum Melee") impTarget = "Post-Quantum Melee (Fairy)";
     if (!BENCHMARKS[impTarget]) impTarget = "Post-Quantum Ranged (Fairy)";
     appState.target_build = impTarget;
     appState.items = Array.isArray(data.items) ? data.items : DEFAULT_STATE.items;
@@ -1461,12 +1713,12 @@ window.addEventListener('DOMContentLoaded', () => {
   targetSelect.value = appState.target_build;
   targetSelect.addEventListener('change', (e) => {
     appState.target_build = e.target.value;
-    if (appState.target_build === "Post-Quantum Ranged (No Fairy)" && appState.fairy_lvl > 0) {
+    if (appState.target_build.includes("(No Fairy)") && appState.fairy_lvl > 0) {
       appState.fairy_lvl = 0.0;
       fairyInp.value = 0;
-    } else if (appState.target_build === "Post-Quantum Ranged (Fairy)" && appState.fairy_lvl === 0) {
-      appState.fairy_lvl = 20.0;
-      fairyInp.value = 20;
+    } else if (appState.target_build.includes("(Fairy)") && appState.fairy_lvl === 0) {
+      appState.fairy_lvl = 11.0;
+      fairyInp.value = 11;
     }
     updateUI();
   });
@@ -1497,6 +1749,10 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-add-pet').addEventListener('click', () => openStorageItemEdit(null, false));
   document.getElementById('btn-run-opti').addEventListener('click', runStorageOptimization);
   document.getElementById('btn-apply-opti').addEventListener('click', applyOptimizedCombo);
+  const btnApplyRisk = document.getElementById('btn-apply-risk-opti');
+  if (btnApplyRisk) {
+    btnApplyRisk.addEventListener('click', applyRiskCombo);
+  }
   document.getElementById('btn-save-storage-item').addEventListener('click', saveStorageItem);
 
   // Top Action buttons
