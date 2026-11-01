@@ -9,8 +9,8 @@ const ITEM_RARITIES = {
   "Interstellar": { name: "Interstellar", color: "#d980fa", border: "#d980fa" },
   "Multiverse": { name: "Multiverse", color: "#00d2d3", border: "#00d2d3" },
   "Quantum": { name: "Quantum", color: "#6c5ce7", border: "#6c5ce7" },
-  "Underworld": { name: "Underworld", color: "#cd6133", border: "#cd6133" },
-  "Divine": { name: "Divine", color: "#ff793f", border: "#ff793f" }
+  "Underworld": { name: "Underworld", color: "#6b2812", border: "#6b2812" },
+  "Divine": { name: "Divine", color: "#ff7700", border: "#ff7700" }
 };
 
 const PET_RARITIES = {
