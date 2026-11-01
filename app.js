@@ -1,12 +1,4 @@
-/**
- * Forge Master Optimizer - Mobile & Desktop Web Edition v2.2.0
- * Features:
- * - 10 Equipment Rarities for Slots 1-8 (Primitive, Medieval, Early-Modern, Modern, Space, Interstellar, Multiverse, Quantum, Underworld, Divine)
- * - 6 Pet/Mount Rarities for Slots 9-12 & Storage (Common, Rare, Epic, Legendary, Ultimate, Mythic)
- * - Attack Speed 203% & 233.4% Breakpoints
- * - Responsive 2-Column Desktop & 1-Column Mobile Layout
- * - Metric k/m base inputs without legacy x1000 multiplier
- */
+
 
 const ITEM_RARITIES = {
   "Primitive": { name: "Primitive", color: "#95a5a6", border: "#95a5a6" },
