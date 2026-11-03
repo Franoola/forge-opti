@@ -81,17 +81,19 @@
             <label for="select-target-build">Target Build Benchmark</label>
             <select id="select-target-build"></select>
           </div>
-          <div class="field-group">
-            <label for="select-fairy-type">Fairy</label>
-            <select id="select-fairy-type">
-              <option value="Lora">Lora (5th Hit DMG)</option>
-              <option value="Mira">Mira (Anti-Crit SCD)</option>
-              <option value="None">None (No Fairy)</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label for="inp-fairy-lvl" id="lbl-fairy-lvl">Fairy Lvl (Max 20)</label>
-            <input type="number" id="inp-fairy-lvl" step="1" min="0" max="20" value="20">
+          <div class="config-row-bottom">
+            <div class="field-group">
+              <label for="select-fairy-type">Active Fairy</label>
+              <select id="select-fairy-type">
+                <option value="Lora">Lora (Every 5th Hit DMG)</option>
+                <option value="Mira">Mira (Anti-Crit SCD)</option>
+                <option value="None">None (No Fairy)</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label for="inp-fairy-lvl" id="lbl-fairy-lvl">Lora Lvl (10%/lvl, Max 20)</label>
+              <input type="number" id="inp-fairy-lvl" step="1" min="0" max="20" value="20">
+            </div>
           </div>
         </section>
 
@@ -119,12 +121,12 @@
           </div>
 
           <div class="hero-match-badge" id="lbl-match">OPTIMAL BUILD MATCH: 0.0%</div>
+          <div class="fairy-badge-line" id="lbl-fairy-effect">✨ FAIRY: None</div>
           <div class="hero-base-stats" id="lbl-base-summary">BASE DMG: 0 | TOTAL HP: 0</div>
 
           <div class="aux-line">
             <span id="lbl-time-per-hit">TIME PER HIT: 0.0s</span>
             <span id="lbl-crit-dmg">CRIT DMG: 0.0% -> 1.2x</span>
-            <span id="lbl-fairy-effect" style="color: #f1c40f; font-weight: bold;">FAIRY: None</span>
           </div>
         </section>
 
@@ -169,15 +171,15 @@
           </div>
 
           <div class="sat-row">
-            <span class="sat-label">Skill Damage</span>
-            <div class="progress-track"><div id="pb-fill-sd" class="progress-fill"></div></div>
-            <span id="pb-lbl-sd" class="sat-value">0.0%</span>
-          </div>
-
-          <div class="sat-row">
             <span class="sat-label">Crit Chance</span>
             <div class="progress-track"><div id="pb-fill-cc" class="progress-fill"></div></div>
             <span id="pb-lbl-cc" class="sat-value">0.0%</span>
+          </div>
+
+          <div class="sat-row">
+            <span class="sat-label">Skill Damage</span>
+            <div class="progress-track"><div id="pb-fill-sd" class="progress-fill"></div></div>
+            <span id="pb-lbl-sd" class="sat-value">0.0%</span>
           </div>
         </section>
 
@@ -424,9 +426,9 @@
 
           <h5 style="color:#3498db; margin-top: 10px; font-size: 0.88rem;">Target Build Godroll Ceilings</h5>
           <ul style="padding-left: 20px; margin-top: 4px; font-size: 0.82rem;">
-            <li><b>Post-Quantum Ranged (Fairy) [31.8x Ceiling]:</b> Target build: 6x Crit Chance, 6x Attack Speed (233.4% breakpoint), 3x Skill Cooldown (21% SCD maxing Mira's 70% anti-crit cap), 2x Lifesteal, 7x Crit Damage.</li>
-            <li><b>Post-Quantum Ranged (No Fairy) [22.3x Ceiling]:</b> Designed for players bypassing the fairy reset. All Crit Chance must be rolled on gear.</li>
-            <li><b>Post-Quantum Melee (Fairy) [58.8x Ceiling]:</b> Target build: 6x Crit Chance, 6x Attack Speed (233.4% breakpoint), 3x Skill Cooldown (21% SCD maxing Mira's 70% anti-crit cap), 2x Lifesteal, 7x Crit Damage.</li>
+            <li><b>Post-Quantum Ranged (Fairy) [21.3x Lora / 14.8x Mira Ceiling]:</b> Target build: 6x Crit Chance (72%), 6x Attack Speed (240% / 0.35s BP), 3x Skill Cooldown (21% SCD maxing Mira's 70% anti-crit cap), 2x Lifesteal (40%), 7x Crit Damage (560%).</li>
+            <li><b>Post-Quantum Melee (Fairy) [21.3x Lora / 14.8x Mira Ceiling]:</b> Target build: 6x Crit Chance, 6x Attack Speed, 3x Skill Cooldown, 2x Lifesteal, 7x Crit Damage (Melee weapon).</li>
+            <li><b>Post-Quantum Ranged (No Fairy) [22.3x Ceiling]:</b> Designed for players bypassing fairy reset. All Crit Chance rolled on gear without SCD.</li>
             <li><b>Post-Quantum Melee (No Fairy) [52.0x Ceiling]:</b> Heavy Melee build without fairy. Balances 350% Melee DMG with 60% gear CC and 400% Crit DMG.</li>
             <li><b>Pre-Quantum Melee [9.0x]:</b> Early/mid-game melee reference.</li>
           </ul>

@@ -48,12 +48,26 @@ const MAX_ROLLS = {
 };
 
 const BENCHMARKS = {
-  "Post-Quantum Ranged (Fairy)": 31.8,
+  "Post-Quantum Ranged (Fairy)": 21.3,
   "Post-Quantum Ranged (No Fairy)": 22.3,
-  "Post-Quantum Melee (Fairy)": 58.8,
+  "Post-Quantum Melee (Fairy)": 21.3,
   "Post-Quantum Melee (No Fairy)": 52.0,
   "Pre-Quantum Melee": 9.0
 };
+
+function getTargetBenchmark(targetBuild = (appState ? appState.target_build : "Post-Quantum Ranged (Fairy)"), fairyType = (appState ? appState.fairy_type : "Lora"), fairyLvl = (appState ? appState.fairy_lvl : 20)) {
+  if (targetBuild && targetBuild.includes("(Fairy)")) {
+    const baseMult = 14.78857;
+    if (fairyType === 'Lora') {
+      const effLvl = fairyLvl > 0 ? Math.min(Math.max(fairyLvl, 1), 20) : 20;
+      const boost = 30.0 + (effLvl - 1) * 10.0;
+      return baseMult * (1.0 + (boost / 500.0));
+    } else {
+      return baseMult;
+    }
+  }
+  return BENCHMARKS[targetBuild] || 22.3;
+}
 
 const BPS = [
   { req: 400.1, interval: 0.3, delay: 0.1 },
@@ -70,7 +84,7 @@ const BPS = [
 ];
 
 const DEFAULT_STATE = {
-  format_version: 2,
+  format_version: 3,
   fairy_type: "Lora",
   fairy_lvl: 20.0,
   target_build: "Post-Quantum Ranged (Fairy)",
@@ -297,7 +311,7 @@ function computeCoreStats(targetBuild) {
 }
 
 function computeMultipliers(stats, weaponType, fairyLvl, fairyType = (appState ? appState.fairy_type : 'Lora')) {
-  let realMd = Math.min(stats.md / 100.0, 3.50);
+  let realMd = stats.md / 100.0;
   let realRd = stats.rd / 100.0;
 
   if (weaponType === 'R') {
@@ -562,8 +576,8 @@ function loadState() {
           appState.items = appState.items.map(migrateLegacyItemString);
           appState.mount_storage = appState.mount_storage.map(migrateLegacyItemString);
           appState.pet_storage = appState.pet_storage.map(migrateLegacyItemString);
-          saveState();
         }
+        appState.format_version = 3;
         return;
       }
     }
@@ -575,7 +589,7 @@ function loadState() {
 }
 
 function saveState() {
-  appState.format_version = 2;
+  appState.format_version = 3;
   localStorage.setItem('forge_master_build_web', JSON.stringify(appState));
 }
 
@@ -589,7 +603,7 @@ function updateUI() {
   const realTotalHp = core.totalHp * (1.0 + (core.stats.hp / 100.0));
   const realHps = (realDps * (core.stats.ls / 100.0)) + (realTotalHp * (core.stats.hr / 100.0));
 
-  const targetMult = BENCHMARKS[appState.target_build] || 31.8;
+  const targetMult = getTargetBenchmark(appState.target_build, appState.fairy_type, appState.fairy_lvl);
   const matchProg = (multObj.dpsMult / targetMult) * 100.0;
 
   // Desktop Hero stats
@@ -611,11 +625,11 @@ function updateUI() {
   const fairyEffectLbl = document.getElementById('lbl-fairy-effect');
   if (fairyEffectLbl) {
     if (appState.fairy_type === 'Lora' && appState.fairy_lvl > 0) {
-      fairyEffectLbl.textContent = `LORA (Lvl ${appState.fairy_lvl}): +${multObj.loraBoost.toFixed(0)}% on 5th hit (${multObj.loraMult.toFixed(2)}x DPS)`;
+      fairyEffectLbl.textContent = `✨ LORA (Lvl ${appState.fairy_lvl}): +${multObj.loraBoost.toFixed(0)}% on 5th hit (${multObj.loraMult.toFixed(2)}x DPS)`;
     } else if (appState.fairy_type === 'Mira' && appState.fairy_lvl > 0) {
-      fairyEffectLbl.textContent = `MIRA (Lvl ${appState.fairy_lvl}): -${multObj.critReduction.toFixed(1)}% Crit Dmg Taken (${multObj.scdBlocks} blk / max 70%)`;
+      fairyEffectLbl.textContent = `🛡️ MIRA (Lvl ${appState.fairy_lvl}): -${multObj.critReduction.toFixed(1)}% Crit Dmg Taken (${multObj.scdBlocks} blk / max 70%)`;
     } else {
-      fairyEffectLbl.textContent = `FAIRY: None`;
+      fairyEffectLbl.textContent = `FAIRY: None (Inactive)`;
     }
   }
 
@@ -645,9 +659,11 @@ function updateUI() {
   updateProgressBar('sd', core.stats.sd, 100.0, false, `${core.stats.sd.toFixed(1)}%`);
 
   const scdVal = core.stats.scd;
-  let scdText = `${scdVal.toFixed(1)}%`;
+  let scdText = `${scdVal.toFixed(1)}% / 20.0%`;
   if (appState.fairy_type === 'Mira' && appState.fairy_lvl > 0) {
     scdText = `${scdVal.toFixed(1)}% (${multObj.critReduction.toFixed(1)}% / 70% Anti-Crit)`;
+  } else if (appState.fairy_type === 'Lora') {
+    scdText = `${scdVal.toFixed(1)}% (20% Mira Cap)`;
   }
   updateProgressBar('scd', scdVal, 20.0, false, scdText);
 
@@ -693,7 +709,7 @@ function updateProgressBar(key, cur, cap, isCut = false, customText = null) {
     lbl.style.color = '#f39c12';
     lbl.textContent = customText ? customText : `${cur.toFixed(1)}% / ${cap.toFixed(1)}%`;
   } else {
-    fill.style.backgroundColor = pct >= 100.0 ? '#dc3545' : (pct > 0 ? '#28a745' : '#1f538d');
+    fill.style.backgroundColor = pct >= 100.0 ? '#2ecc71' : (pct > 0 ? '#27ae60' : '#1f538d');
     lbl.style.color = '#ffffff';
     lbl.textContent = customText ? customText : `${cur.toFixed(1)}% / ${cap.toFixed(1)}%`;
   }
@@ -1103,7 +1119,7 @@ function runSimulationWithStorage() {
 
   // 5. Verdict and Results
   const container = document.getElementById('sim-swap-result');
-  const targetMult = BENCHMARKS[appState.target_build] || 31.8;
+  const targetMult = getTargetBenchmark(appState.target_build, appState.fairy_type, appState.fairy_lvl);
 
   const hasHigherDpsRisk = (bestRisk !== null) && 
     (bestSafe === null || bestRisk.dps > bestSafe.dps * 1.0001);
@@ -1771,6 +1787,7 @@ window.addEventListener('DOMContentLoaded', () => {
         fairyInp.value = 20;
       }
     }
+    saveState();
     updateUI();
   });
 

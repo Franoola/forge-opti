@@ -246,10 +246,27 @@ main.main-container {
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+.fairy-badge-line {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #f1c40f;
+  background: rgba(241, 196, 15, 0.12);
+  border: 1px solid rgba(241, 196, 15, 0.35);
+  border-radius: 6px;
+  padding: 6px 12px;
+  margin: 6px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  letter-spacing: 0.3px;
+  box-shadow: 0 0 10px rgba(241, 196, 15, 0.1);
+}
+
 .aux-line {
   display: flex;
-  justify-content: space-around;
-  font-size: 0.82rem;
+  justify-content: space-between;
+  font-size: 0.84rem;
   font-weight: 700;
   margin-top: 6px;
   padding-top: 6px;
@@ -396,13 +413,19 @@ main.main-container {
 
 /* Config Bar */
 .config-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   background: var(--bg-card);
   padding: 14px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
+}
+
+.config-row-bottom {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 12px;
 }
 
 .field-group {
