@@ -1,12 +1,4 @@
-/**
- * Forge Master Optimizer - Mobile & Desktop Web Edition v2.2.0
- * Features:
- * - 10 Equipment Rarities for Slots 1-8 (Primitive, Medieval, Early-Modern, Modern, Space, Interstellar, Multiverse, Quantum, Underworld, Divine)
- * - 6 Pet/Mount Rarities for Slots 9-12 & Storage (Common, Rare, Epic, Legendary, Ultimate, Mythic)
- * - Attack Speed 203% & 233.4% Breakpoints
- * - Responsive 2-Column Desktop & 1-Column Mobile Layout
- * - Metric k/m base inputs without legacy x1000 multiplier
- */
+
 
 const ITEM_RARITIES = {
   "Primitive": { name: "Primitive", color: "#95a5a6", border: "#95a5a6" },
@@ -18,7 +10,7 @@ const ITEM_RARITIES = {
   "Multiverse": { name: "Multiverse", color: "#00d2d3", border: "#00d2d3" },
   "Quantum": { name: "Quantum", color: "#6c5ce7", border: "#6c5ce7" },
   "Underworld": { name: "Underworld", color: "#3d2a29", border: "#3d2a29" },
-  "Divine": { name: "Divine", color: "#ff793f", border: "#ff793f" }
+  "Divine": { name: "Divine", color: "#ff8c00", border: "#ff8c00" }
 };
 
 const PET_RARITIES = {
@@ -56,11 +48,10 @@ const MAX_ROLLS = {
 };
 
 const BENCHMARKS = {
-  "Post-Quantum Melee (Tira Mogger)": 53.6,
-  "Post-Quantum Melee (Lora Crit)": 75.3,
-  "Post-Quantum Ranged (Lora Crit)": 80.9,
-  "Post-Quantum Melee (No Fairy)": 55.6,
+  "Post-Quantum Ranged (Fairy)": 31.8,
   "Post-Quantum Ranged (No Fairy)": 22.3,
+  "Post-Quantum Melee (Fairy)": 58.8,
+  "Post-Quantum Melee (No Fairy)": 52.0,
   "Pre-Quantum Melee": 9.0
 };
 
@@ -80,9 +71,9 @@ const BPS = [
 
 const DEFAULT_STATE = {
   format_version: 2,
-  fairy: "Tira",
+  fairy_type: "Lora",
   fairy_lvl: 20.0,
-  target_build: "Post-Quantum Melee (Tira Mogger)",
+  target_build: "Post-Quantum Ranged (Fairy)",
   items: [
     "Primitive, 2970000h, 25.6as, 19.4sd",
     "Primitive, 1580000h, 27.9as, 75cd",
@@ -305,84 +296,83 @@ function computeCoreStats(targetBuild) {
   return { totalDmg, totalHp, stats, weaponType, logs };
 }
 
-function computeMultipliers(stats, weaponType, fairyLvl, activeFairy = null) {
-  // Melee Damage has NO 350% cap (uncapped scaling)
-  let realMd = (weaponType === 'M') ? (stats.md / 100.0) : 0.0;
-  // Ranged Damage is hard-capped at 350%
-  let realRd = (weaponType === 'R') ? Math.min(stats.rd / 100.0, 3.50) : 0.0;
+function computeMultipliers(stats, weaponType, fairyLvl, fairyType = (appState ? appState.fairy_type : 'Lora')) {
+  let realMd = Math.min(stats.md / 100.0, 3.50);
+  let realRd = stats.rd / 100.0;
 
-  let realDmg = stats.dmg / 100.0;
+  if (weaponType === 'R') {
+    realMd = 0.0;
+  } else if (weaponType === 'M') {
+    realRd = 0.0;
+  }
+
+  const realDmg = stats.dmg / 100.0;
   const realDc = Math.min(stats.dc / 100.0, 1.00);
 
-  let chosenFairy = activeFairy;
-  if (!chosenFairy) {
-    chosenFairy = appState.fairy;
-  }
-  if (!chosenFairy) {
-    const currentTarget = appState.target_build || "";
-    if (currentTarget.includes("Tira") || currentTarget.includes("Fairy 2") || (currentTarget.includes("Melee") && !currentTarget.includes("No Fairy") && !currentTarget.includes("Lora"))) {
-      chosenFairy = "Tira";
-    } else if (currentTarget.includes("Lora") || currentTarget.includes("Fairy 3") || (currentTarget.includes("Ranged") && !currentTarget.includes("No Fairy"))) {
-      chosenFairy = "Lora";
-    } else {
-      chosenFairy = "None";
-    }
-  }
-
-  let fairyBlocks = 0;
-  let fairyDmg = 0.0;
-  let fairyBurstMult = 1.0;
-  let loraBoostPct = 0.0;
-
-  if (chosenFairy === "Tira" && fairyLvl > 0) {
-    // Tira: 5% per 10% HP at level 1, +0.5% per level up to level 20 (14.5% - 15.0%)
-    const pctPer10Hp = 5.0 + Math.max(0.0, fairyLvl - 1.0) * 0.5;
-    fairyBlocks = Math.floor(stats.hp / 10.0);
-    fairyDmg = fairyBlocks * pctPer10Hp;
-    realDmg += fairyDmg / 100.0;
-  } else if (chosenFairy === "Lora" && fairyLvl > 0) {
-    // Lora: 1 in 5 attacks deals boosted damage: 30% at level 1, +10% per level (220% at level 20 -> +44% avg DPS)
-    loraBoostPct = 30.0 + Math.max(0.0, fairyLvl - 1.0) * 10.0;
-    fairyBurstMult = 1.0 + (loraBoostPct / 500.0);
-  }
-
-  // Gear Crit Chance cap is 100%
-  const maxCcCap = 1.00;
-  const realCc = Math.min(stats.cc / 100.0, maxCcCap);
+  // Crit calculations: Crit Chance is rolled directly on gear up to 100%
+  const realCc = Math.min(stats.cc / 100.0, 1.00);
   const realCd = 1.20 + (stats.cd / 100.0);
 
   const timing = getAttackTiming(stats.as);
   const timePerHit = (timing.interval + realDc * timing.delay) / (1.0 + realDc);
 
-  const ampMult = (1.0 + realDmg) * (1.0 + realMd + realRd) * fairyBurstMult;
+  const ampMult = (1.0 + realDmg) * (1.0 + realMd + realRd);
   const critMult = 1.0 + (realCc * (realCd - 1.0));
 
-  const dpsMult = (ampMult * critMult) / timePerHit;
+  let baseDpsMult = (ampMult * critMult) / timePerHit;
+
+  // Lora: Every 5th attack deals +30% (+10% per level, up to +220% at lvl 20) more Damage
+  let loraBoost = 0.0;
+  let loraMult = 1.0;
+  if (fairyType === 'Lora' && fairyLvl > 0) {
+    const effLvl = Math.min(Math.max(fairyLvl, 1), 20);
+    loraBoost = 30.0 + (effLvl - 1) * 10.0; // 30% at lvl 1, 220% at lvl 20
+    loraMult = 1.0 + (loraBoost / 500.0); // average over 5 attacks: (4*1 + 1*(1 + boost/100)) / 5
+  }
+
+  // Mira: Reduce incoming Damage from Critical Hits by 4.5% (+0.5% per level, up to 14.0% at lvl 20) for every -4% SCD. Capped at 70%.
+  let miraReductionPerBlock = 0.0;
+  let scdBlocks = 0;
+  let critReduction = 0.0;
+  if (fairyType === 'Mira' && fairyLvl > 0) {
+    const effLvl = Math.min(Math.max(fairyLvl, 1), 20);
+    miraReductionPerBlock = 4.5 + (effLvl - 1) * 0.5; // 4.5% at lvl 1, 14.0% at lvl 20
+    scdBlocks = Math.floor(stats.scd / 4.0);
+    critReduction = Math.min(scdBlocks * miraReductionPerBlock, 70.0);
+  }
+
+  const dpsMult = baseDpsMult * loraMult;
 
   return {
-    dpsMult, fairyBlocks, fairyDmg, fairyBurstMult, loraBoostPct, realCc, realCd,
-    interval: timing.interval, delay: timing.delay, nextBp: timing.nextBp,
-    timePerHit
+    dpsMult,
+    baseDpsMult,
+    realCc,
+    realCd,
+    interval: timing.interval,
+    delay: timing.delay,
+    nextBp: timing.nextBp,
+    timePerHit,
+    fairyType,
+    fairyLvl,
+    loraBoost,
+    loraMult,
+    miraReductionPerBlock,
+    scdBlocks,
+    critReduction
   };
 }
 
-function calculateBuildScore(realDps, realHp, realHps) {
-  const sustainRatio = Math.min(realHps / (realDps + 1.0), 2.0);
-  const ehpFactor = Math.min(realHp / 10000000.0, 3.0);
-  const compositeWeight = 1.0 + (0.15 * sustainRatio) + (0.10 * ehpFactor);
+function calculateBuildScore(realDps, realHp, realHps, critReduction = 0.0) {
+  const sustainRatio = Math.min(realHps / (realDps + 1.0), 1.5);
+  const ehpFactor = Math.min(realHp / 8000000.0, 2.0);
+  const critMitigation = 1.0 + (critReduction / 100.0) * 0.15;
+  const compositeWeight = (1.0 + (0.10 * sustainRatio) + (0.05 * ehpFactor)) * critMitigation;
   return realDps * compositeWeight;
 }
 
-function calculateEffectiveQuality(itemStr, isWeapon, oldStats, newStats, fairyLvl, weaponType = 'R', activeFairy = null) {
+function calculateEffectiveQuality(itemStr, isWeapon, oldStats, newStats, fairyLvl, weaponType = 'R', fairyType = (appState ? appState.fairy_type : 'Lora')) {
   const { cleanStr } = parseItemRarity(itemStr, isWeapon);
   const parts = cleanStr.split(",").map(p => p.trim());
-
-  let chosenFairy = activeFairy || appState.fairy;
-  if (!chosenFairy) {
-    chosenFairy = (appState.target_build && (appState.target_build.includes("Tira") || appState.target_build.includes("Fairy 2"))) ? "Tira" : "Lora";
-  }
-
-  const isTiraMelee = (chosenFairy === 'Tira') && (weaponType === 'M');
 
   const pctScores = [];
   for (let p of parts) {
@@ -395,7 +385,7 @@ function calculateEffectiveQuality(itemStr, isWeapon, oldStats, newStats, fairyL
       if (MAX_ROLLS[tag] !== undefined) {
         let effVal = val;
 
-        // 1. Melee DMG is 100% useless on Ranged; UNCAPPED on Melee!
+        // 1. Melee DMG is 100% useless on Ranged weapons
         if (tag === 'md') {
           if (weaponType !== 'M') {
             effVal = 0.0;
@@ -403,39 +393,37 @@ function calculateEffectiveQuality(itemStr, isWeapon, oldStats, newStats, fairyL
             effVal = Math.max(0.0, newStats.md - oldStats.md);
           }
         }
-        // 2. Ranged DMG is 100% useless on Melee; hard-capped at 350% on Ranged
+        // 2. Ranged DMG is 100% useless on Melee weapons
         else if (tag === 'rd') {
           if (weaponType !== 'R') {
             effVal = 0.0;
           } else {
-            effVal = Math.min(newStats.rd, 350.0) - Math.min(oldStats.rd, 350.0);
+            effVal = Math.max(0.0, newStats.rd - oldStats.rd);
           }
         }
-        // 3. Crit Chance: In Tira Melee Mogger, Crit is not used (0% value); in Lora/Crit builds/Non-fairy, scales to 100%
+        // 3. Crit Chance: capped at 100%
         else if (tag === 'cc') {
-          if (isTiraMelee) {
-            effVal = 0.0;
+          effVal = Math.min(newStats.cc, 100.0) - Math.min(oldStats.cc, 100.0);
+        }
+        // 4. Skill Cooldown: valuable for Mira up to 20% SCD (5 blocks of 4% = 70% cap)
+        else if (tag === 'scd') {
+          if (fairyType === 'Mira' && fairyLvl > 0) {
+            const oldScdBlocks = Math.min(Math.floor(oldStats.scd / 4.0), 5);
+            const newScdBlocks = Math.min(Math.floor(newStats.scd / 4.0), 5);
+            effVal = (newScdBlocks - oldScdBlocks) * 4.0;
           } else {
-            effVal = Math.min(newStats.cc, 100.0) - Math.min(oldStats.cc, 100.0);
+            effVal = Math.min(newStats.scd, 21.0) - Math.min(oldStats.scd, 21.0);
           }
         }
-        // 4. Crit Damage: In Tira Melee Mogger, CD has 0% value; in Lora/Crit builds/Non-fairy, full value
-        else if (tag === 'cd') {
-          if (isTiraMelee) {
-            effVal = 0.0;
-          } else {
-            effVal = Math.max(0.0, newStats.cd - oldStats.cd);
-          }
-        }
-        // 5. Skill Damage: Obsolete with new fairies (0% value)
+        // 5. Skill Damage: no longer converts to CC
         else if (tag === 'sd') {
           effVal = 0.0;
         }
-        // 5. Double Chance: capped at 100%
+        // 6. Double Chance: capped at 100%
         else if (tag === 'dc') {
           effVal = Math.min(newStats.dc, 100.0) - Math.min(oldStats.dc, 100.0);
         }
-        // 6. Attack Speed: only useful if it hits a lower attack interval breakpoint
+        // 7. Attack Speed: only useful if it hits a lower attack interval breakpoint
         else if (tag === 'as') {
           const oldInt = getAttackTiming(oldStats.as).interval;
           const newInt = getAttackTiming(newStats.as).interval;
@@ -559,26 +547,13 @@ function loadState() {
       const data = JSON.parse(raw);
       if (data && typeof data === 'object') {
         const version = data.format_version || 1;
-        appState.fairy_lvl = parseFloat(data.fairy_lvl) || 20.0;
-        let loadedTarget = data.target_build || "Post-Quantum Melee (Tira Mogger)";
-        if (loadedTarget === "Post-Quantum Ranged" || loadedTarget === "Post-Quantum Ranged (Fairy)" || loadedTarget === "Post-Quantum Ranged (Fairy 3)") loadedTarget = "Post-Quantum Ranged (Lora Crit)";
-        if (loadedTarget === "Post-Quantum Melee" || loadedTarget === "Post-Quantum Melee (Fairy)" || loadedTarget === "Post-Quantum Melee (Fairy 2 Mogger)") loadedTarget = "Post-Quantum Melee (Tira Mogger)";
-        if (!BENCHMARKS[loadedTarget]) loadedTarget = "Post-Quantum Melee (Tira Mogger)";
+        appState.fairy_type = data.fairy_type || "Lora";
+        appState.fairy_lvl = data.fairy_lvl !== undefined ? Math.min(parseFloat(data.fairy_lvl) || 0, 20.0) : 20.0;
+        let loadedTarget = data.target_build || "Post-Quantum Ranged (Fairy)";
+        if (loadedTarget === "Post-Quantum Ranged") loadedTarget = "Post-Quantum Ranged (Fairy)";
+        if (loadedTarget === "Post-Quantum Melee") loadedTarget = "Post-Quantum Melee (Fairy)";
+        if (!BENCHMARKS[loadedTarget]) loadedTarget = "Post-Quantum Ranged (Fairy)";
         appState.target_build = loadedTarget;
-
-        if (data.fairy) {
-          appState.fairy = data.fairy;
-        } else {
-          if (appState.target_build.includes("Tira")) {
-            appState.fairy = "Tira";
-          } else if (appState.target_build.includes("Lora")) {
-            appState.fairy = "Lora";
-          } else if (appState.target_build.includes("(No Fairy)")) {
-            appState.fairy = "None";
-          } else {
-            appState.fairy = appState.fairy_lvl > 0 ? "Tira" : "None";
-          }
-        }
         appState.items = Array.isArray(data.items) ? data.items : DEFAULT_STATE.items;
         appState.mount_storage = Array.isArray(data.mount_storage) ? data.mount_storage : DEFAULT_STATE.mount_storage;
         appState.pet_storage = Array.isArray(data.pet_storage) ? data.pet_storage : DEFAULT_STATE.pet_storage;
@@ -614,7 +589,7 @@ function updateUI() {
   const realTotalHp = core.totalHp * (1.0 + (core.stats.hp / 100.0));
   const realHps = (realDps * (core.stats.ls / 100.0)) + (realTotalHp * (core.stats.hr / 100.0));
 
-  const targetMult = BENCHMARKS[appState.target_build] || 38.5;
+  const targetMult = BENCHMARKS[appState.target_build] || 31.8;
   const matchProg = (multObj.dpsMult / targetMult) * 100.0;
 
   // Desktop Hero stats
@@ -622,9 +597,7 @@ function updateUI() {
   document.getElementById('lbl-hps').textContent = `${realHps.toLocaleString('en-US', { maximumFractionDigits: 1 })}`;
   document.getElementById('lbl-mult').textContent = `${multObj.dpsMult.toFixed(1)}x`;
   document.getElementById('lbl-match').textContent = `OPTIMAL BUILD MATCH: ${matchProg.toFixed(1)}%`;
-  const pvp1v1Hp = realTotalHp * 5.0;
-  const pvp1v1Regen = pvp1v1Hp * (core.stats.hr / 100.0);
-  document.getElementById('lbl-base-summary').textContent = `BASE DMG: ${core.totalDmg.toLocaleString('en-US', { maximumFractionDigits: 1 })} | PVE HP: ${realTotalHp.toLocaleString('en-US', { maximumFractionDigits: 1 })} | 1v1 HP (5x): ${pvp1v1Hp.toLocaleString('en-US', { maximumFractionDigits: 0 })} | REGEN: ${pvp1v1Regen.toLocaleString('en-US', { maximumFractionDigits: 0 })}/s`;
+  document.getElementById('lbl-base-summary').textContent = `BASE DMG: ${core.totalDmg.toLocaleString('en-US', { maximumFractionDigits: 1 })} | TOTAL HP: ${realTotalHp.toLocaleString('en-US', { maximumFractionDigits: 1 })} (+${core.stats.hp.toFixed(1)}%)`;
 
   // Mobile Sticky Header stats
   document.getElementById('mob-lbl-dps').textContent = `DPS: ${realDps.toLocaleString('en-US', { maximumFractionDigits: 1 })}`;
@@ -635,9 +608,31 @@ function updateUI() {
   document.getElementById('lbl-time-per-hit').textContent = `TIME PER HIT: ${multObj.timePerHit.toFixed(2)}s`;
   document.getElementById('lbl-crit-dmg').textContent = `CRIT DMG: ${core.stats.cd.toFixed(1)}% -> ${multObj.realCd.toFixed(2)}x`;
 
+  const fairyEffectLbl = document.getElementById('lbl-fairy-effect');
+  if (fairyEffectLbl) {
+    if (appState.fairy_type === 'Lora' && appState.fairy_lvl > 0) {
+      fairyEffectLbl.textContent = `LORA (Lvl ${appState.fairy_lvl}): +${multObj.loraBoost.toFixed(0)}% on 5th hit (${multObj.loraMult.toFixed(2)}x DPS)`;
+    } else if (appState.fairy_type === 'Mira' && appState.fairy_lvl > 0) {
+      fairyEffectLbl.textContent = `MIRA (Lvl ${appState.fairy_lvl}): -${multObj.critReduction.toFixed(1)}% Crit Dmg Taken (${multObj.scdBlocks} blk / max 70%)`;
+    } else {
+      fairyEffectLbl.textContent = `FAIRY: None`;
+    }
+  }
+
+  const fairyLabel = document.getElementById('lbl-fairy-lvl');
+  if (fairyLabel) {
+    if (appState.fairy_type === 'Lora') {
+      fairyLabel.textContent = `Lora Lvl (10%/lvl, Max 20)`;
+    } else if (appState.fairy_type === 'Mira') {
+      fairyLabel.textContent = `Mira Lvl (0.5%/lvl, Max 20)`;
+    } else {
+      fairyLabel.textContent = `Fairy Lvl (Disabled)`;
+    }
+  }
+
   // Saturation Monitor Progress Bars
-  updateProgressBar('md', core.stats.md, 560.0, core.weaponType === 'R', `${core.stats.md.toFixed(1)}% (Uncapped)`);
-  updateProgressBar('rd', core.stats.rd, 350.0, core.weaponType === 'M', `${core.stats.rd.toFixed(1)}% / 350.0% (Cap)`);
+  updateProgressBar('md', core.stats.md, 350.0, core.weaponType === 'R');
+  updateProgressBar('rd', core.stats.rd, 100.0, core.weaponType === 'M');
 
   const asVal = core.stats.as;
   let asText = `${asVal.toFixed(1)}% (Next BP: ${multObj.nextBp}%)`;
@@ -647,22 +642,16 @@ function updateUI() {
   updateProgressBar('dc', core.stats.dc, 100.0);
   const lsText = core.stats.ls < 30.0 ? `${core.stats.ls.toFixed(1)}% (⚠️ Below 30% Risk)` : `${core.stats.ls.toFixed(1)}% (Min 30.0%)`;
   updateProgressBar('ls', core.stats.ls, 100.0, false, lsText);
+  updateProgressBar('sd', core.stats.sd, 100.0, false, `${core.stats.sd.toFixed(1)}%`);
 
-  // Dynamic Fairy progress text & label
-  const satLabel = document.getElementById('sat-fairy-name');
-  if (appState.fairy === "Tira") {
-    if (satLabel) satLabel.textContent = "Fairy (Tira)";
-    updateProgressBar('sd', Math.min(core.stats.hp, 120.0), 120.0, false, `${core.stats.hp.toFixed(1)}% HP -> +${multObj.fairyDmg.toFixed(1)}% DMG (Tira Lv.${appState.fairy_lvl})`);
-  } else if (appState.fairy === "Lora") {
-    if (satLabel) satLabel.textContent = "Fairy (Lora)";
-    const avgBoost = (multObj.fairyBurstMult - 1.0) * 100.0;
-    updateProgressBar('sd', avgBoost, 44.0, false, `+${multObj.loraBoostPct.toFixed(0)}% on 5th hit (+${avgBoost.toFixed(1)}% Avg) (Lora Lv.${appState.fairy_lvl})`);
-  } else {
-    if (satLabel) satLabel.textContent = "Fairy Bonus";
-    updateProgressBar('sd', 0.0, 100.0, false, `No Fairy Active`);
+  const scdVal = core.stats.scd;
+  let scdText = `${scdVal.toFixed(1)}%`;
+  if (appState.fairy_type === 'Mira' && appState.fairy_lvl > 0) {
+    scdText = `${scdVal.toFixed(1)}% (${multObj.critReduction.toFixed(1)}% / 70% Anti-Crit)`;
   }
+  updateProgressBar('scd', scdVal, 20.0, false, scdText);
 
-  updateProgressBar('cc', multObj.realCc * 100.0, 100.0, false, `${(multObj.realCc * 100.0).toFixed(1)}% / 100.0% (Gear: ${core.stats.cc.toFixed(1)}%)`);
+  updateProgressBar('cc', multObj.realCc * 100.0, 100.0, false, `${(multObj.realCc * 100.0).toFixed(1)}% / 100%`);
 
   // Render Gear Grid (Slots 1-8)
   for (let i = 0; i < 8; i++) {
@@ -996,7 +985,7 @@ function runSimulationWithStorage() {
   const currDps = currCore.totalDmg * currMultObj.dpsMult;
   const currHp = currCore.totalHp * (1.0 + (currCore.stats.hp / 100.0));
   const currHps = (currDps * (currCore.stats.ls / 100.0)) + (currHp * (currCore.stats.hr / 100.0));
-  const currScore = calculateBuildScore(currDps, currHp, currHps);
+  const currScore = calculateBuildScore(currDps, currHp, currHps, currMultObj.critReduction);
 
   // 2. Base test build with new item in currentCalibrationSlot
   const tempBuild = [...appState.items];
@@ -1026,7 +1015,7 @@ function runSimulationWithStorage() {
     const d = c.totalDmg * mObj.dpsMult;
     const h = c.totalHp * (1.0 + (c.stats.hp / 100.0));
     const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
-    const score = calculateBuildScore(d, h, hps);
+    const score = calculateBuildScore(d, h, hps, mObj.critReduction);
     const ls = c.stats.ls;
 
     const cand = {
@@ -1114,7 +1103,7 @@ function runSimulationWithStorage() {
 
   // 5. Verdict and Results
   const container = document.getElementById('sim-swap-result');
-  const targetMult = BENCHMARKS[appState.target_build] || 38.5;
+  const targetMult = BENCHMARKS[appState.target_build] || 31.8;
 
   const hasHigherDpsRisk = (bestRisk !== null) && 
     (bestSafe === null || bestRisk.dps > bestSafe.dps * 1.0001);
@@ -1484,7 +1473,7 @@ function runStorageOptimization() {
   const currDps = currCore.totalDmg * currMultObj.dpsMult;
   const currHp = currCore.totalHp * (1.0 + (currCore.stats.hp / 100.0));
   const currHps = (currDps * (currCore.stats.ls / 100.0)) + (currHp * (currCore.stats.hr / 100.0));
-  const currScore = calculateBuildScore(currDps, currHp, currHps);
+  const currScore = calculateBuildScore(currDps, currHp, currHps, currMultObj.critReduction);
 
   let bestSafe = null;
   let bestRisk = null;
@@ -1503,7 +1492,7 @@ function runStorageOptimization() {
       const dps = c.totalDmg * mObj.dpsMult;
       const hp = c.totalHp * (1.0 + (c.stats.hp / 100.0));
       const hps = (dps * (c.stats.ls / 100.0)) + (hp * (c.stats.hr / 100.0));
-      const score = calculateBuildScore(dps, hp, hps);
+      const score = calculateBuildScore(dps, hp, hps, mObj.critReduction);
       const ls = c.stats.ls;
 
       const cand = {
@@ -1701,26 +1690,13 @@ function handleJsonImport() {
     if (!data || typeof data !== 'object') throw new Error("Invalid format");
 
     const version = data.format_version || 1;
-    appState.fairy_lvl = parseFloat(data.fairy_lvl) || 20.0;
-    let impTarget = data.target_build || "Post-Quantum Melee (Tira Mogger)";
-    if (impTarget === "Post-Quantum Ranged" || impTarget === "Post-Quantum Ranged (Fairy)" || impTarget === "Post-Quantum Ranged (Fairy 3)") impTarget = "Post-Quantum Ranged (Lora Crit)";
-    if (impTarget === "Post-Quantum Melee" || impTarget === "Post-Quantum Melee (Fairy)" || impTarget === "Post-Quantum Melee (Fairy 2 Mogger)") impTarget = "Post-Quantum Melee (Tira Mogger)";
-    if (!BENCHMARKS[impTarget]) impTarget = "Post-Quantum Melee (Tira Mogger)";
+    appState.fairy_type = data.fairy_type || "Lora";
+    appState.fairy_lvl = data.fairy_lvl !== undefined ? Math.min(parseFloat(data.fairy_lvl) || 0, 20.0) : 20.0;
+    let impTarget = data.target_build || "Post-Quantum Ranged (Fairy)";
+    if (impTarget === "Post-Quantum Ranged") impTarget = "Post-Quantum Ranged (Fairy)";
+    if (impTarget === "Post-Quantum Melee") impTarget = "Post-Quantum Melee (Fairy)";
+    if (!BENCHMARKS[impTarget]) impTarget = "Post-Quantum Ranged (Fairy)";
     appState.target_build = impTarget;
-
-    if (data.fairy) {
-      appState.fairy = data.fairy;
-    } else {
-      if (appState.target_build.includes("Tira")) {
-        appState.fairy = "Tira";
-      } else if (appState.target_build.includes("Lora")) {
-        appState.fairy = "Lora";
-      } else if (appState.target_build.includes("(No Fairy)")) {
-        appState.fairy = "None";
-      } else {
-        appState.fairy = appState.fairy_lvl > 0 ? "Tira" : "None";
-      }
-    }
     appState.items = Array.isArray(data.items) ? data.items : DEFAULT_STATE.items;
     appState.mount_storage = Array.isArray(data.mount_storage) ? data.mount_storage : DEFAULT_STATE.mount_storage;
     appState.pet_storage = Array.isArray(data.pet_storage) ? data.pet_storage : DEFAULT_STATE.pet_storage;
@@ -1774,73 +1750,58 @@ function closeModals() {
 window.addEventListener('DOMContentLoaded', () => {
   loadState();
 
-  // Active Fairy dropdown
-  const fairySelect = document.getElementById('select-fairy');
-  if (fairySelect) {
-    fairySelect.value = appState.fairy || "Tira";
-    fairySelect.addEventListener('change', (e) => {
-      appState.fairy = e.target.value;
-      if (appState.fairy === "None") {
-        appState.fairy_lvl = 0;
-        fairyInp.value = 0;
-      } else if (appState.fairy_lvl === 0) {
-        appState.fairy_lvl = 20;
-        fairyInp.value = 20;
-      }
-      updateFairyLabel();
-      saveState();
-      updateUI();
-    });
-  }
-
   // Target Build dropdown
   const targetSelect = document.getElementById('select-target-build');
   targetSelect.innerHTML = Object.keys(BENCHMARKS).map(k => `<option value="${k}">${k}</option>`).join("");
   targetSelect.value = appState.target_build;
   targetSelect.addEventListener('change', (e) => {
     appState.target_build = e.target.value;
-    if (appState.target_build.includes("Tira")) {
-      appState.fairy = "Tira";
-      if (fairySelect) fairySelect.value = "Tira";
-      if (appState.fairy_lvl === 0) { appState.fairy_lvl = 20; fairyInp.value = 20; }
-    } else if (appState.target_build.includes("Lora")) {
-      appState.fairy = "Lora";
-      if (fairySelect) fairySelect.value = "Lora";
-      if (appState.fairy_lvl === 0) { appState.fairy_lvl = 20; fairyInp.value = 20; }
-    } else if (appState.target_build.includes("(No Fairy)")) {
-      appState.fairy = "None";
-      if (fairySelect) fairySelect.value = "None";
-      appState.fairy_lvl = 0;
+    if (appState.target_build.includes("(No Fairy)")) {
+      appState.fairy_type = "None";
+      appState.fairy_lvl = 0.0;
+      if (fairyTypeSelect) fairyTypeSelect.value = "None";
       fairyInp.value = 0;
+    } else if (appState.target_build.includes("(Fairy)")) {
+      if (appState.fairy_type === "None") {
+        appState.fairy_type = "Lora";
+        if (fairyTypeSelect) fairyTypeSelect.value = "Lora";
+      }
+      if (appState.fairy_lvl === 0) {
+        appState.fairy_lvl = 20.0;
+        fairyInp.value = 20;
+      }
     }
-    updateFairyLabel();
-    saveState();
     updateUI();
   });
 
-  function updateFairyLabel() {
-    const lbl = document.querySelector('label[for="inp-fairy-lvl"]');
-    if (!lbl) return;
-    if (appState.fairy === "Tira") {
-      lbl.textContent = "Tira Lvl (5% + 0.5%/lvl per 10% HP)";
-    } else if (appState.fairy === "Lora") {
-      lbl.textContent = "Lora Lvl (30% + 10%/lvl on 5th hit)";
-    } else {
-      lbl.textContent = "Fairy Level (No Fairy = 0)";
-    }
+  // Fairy Type select
+  const fairyTypeSelect = document.getElementById('select-fairy-type');
+  if (fairyTypeSelect) {
+    fairyTypeSelect.value = appState.fairy_type || "Lora";
+    fairyTypeSelect.addEventListener('change', (e) => {
+      appState.fairy_type = e.target.value;
+      if (appState.fairy_type === "None") {
+        appState.fairy_lvl = 0.0;
+        fairyInp.value = 0;
+      } else if (appState.fairy_lvl === 0) {
+        appState.fairy_lvl = 20.0;
+        fairyInp.value = 20;
+      }
+      updateUI();
+    });
   }
-  updateFairyLabel();
 
-  // Fairy Level input
+  // Fairy Level input (Max 20)
   const fairyInp = document.getElementById('inp-fairy-lvl');
   fairyInp.value = appState.fairy_lvl;
+  fairyInp.max = 20;
   fairyInp.addEventListener('input', (e) => {
-    const v = parseFloat(e.target.value);
-    if (!isNaN(v)) {
-      appState.fairy_lvl = v;
-      saveState();
-      updateUI();
-    }
+    let v = parseFloat(e.target.value);
+    if (isNaN(v)) v = 0;
+    if (v > 20) v = 20;
+    if (v < 0) v = 0;
+    appState.fairy_lvl = v;
+    updateUI();
   });
 
   // Weapon toggle buttons in modal

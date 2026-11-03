@@ -75,23 +75,23 @@
           </div>
         </section>
 
-        <!-- Configuration Bar (Target Build & Fairy) -->
+        <!-- Configuration Bar (Target Build, Fairy Selection & Level) -->
         <section class="config-bar">
           <div class="field-group">
             <label for="select-target-build">Target Build Benchmark</label>
             <select id="select-target-build"></select>
           </div>
           <div class="field-group">
-            <label for="select-fairy">Active Fairy</label>
-            <select id="select-fairy">
-              <option value="Tira">Tira (DMG per 10% HP)</option>
-              <option value="Lora">Lora (1 in 5 Attack Boost)</option>
+            <label for="select-fairy-type">Fairy</label>
+            <select id="select-fairy-type">
+              <option value="Lora">Lora (5th Hit DMG)</option>
+              <option value="Mira">Mira (Anti-Crit SCD)</option>
               <option value="None">None (No Fairy)</option>
             </select>
           </div>
           <div class="field-group">
-            <label for="inp-fairy-lvl">Fairy Level (Level 1-20)</label>
-            <input type="number" id="inp-fairy-lvl" step="1" min="0" max="25" value="20">
+            <label for="inp-fairy-lvl" id="lbl-fairy-lvl">Fairy Lvl (Max 20)</label>
+            <input type="number" id="inp-fairy-lvl" step="1" min="0" max="20" value="20">
           </div>
         </section>
 
@@ -124,6 +124,7 @@
           <div class="aux-line">
             <span id="lbl-time-per-hit">TIME PER HIT: 0.0s</span>
             <span id="lbl-crit-dmg">CRIT DMG: 0.0% -> 1.2x</span>
+            <span id="lbl-fairy-effect" style="color: #f1c40f; font-weight: bold;">FAIRY: None</span>
           </div>
         </section>
 
@@ -162,7 +163,13 @@
           </div>
 
           <div class="sat-row">
-            <span id="sat-fairy-name" class="sat-label">Fairy Bonus</span>
+            <span class="sat-label">Skill Cooldown</span>
+            <div class="progress-track"><div id="pb-fill-scd" class="progress-fill"></div></div>
+            <span id="pb-lbl-scd" class="sat-value">0.0%</span>
+          </div>
+
+          <div class="sat-row">
+            <span class="sat-label">Skill Damage</span>
             <div class="progress-track"><div id="pb-fill-sd" class="progress-fill"></div></div>
             <span id="pb-lbl-sd" class="sat-value">0.0%</span>
           </div>
@@ -409,19 +416,19 @@
           </div>
           <p style="font-size:0.78rem; color:#bdc3c7;">Any Attack Speed above 150.1% that fails to hit the next tier is penalized in quality scoring as wasted stats.</p>
 
-          <h5 style="color:#2ecc71; margin-top: 10px; font-size: 0.88rem;">Fairies Meta: Tira vs Lora</h5>
-          <p><b>Tira (Damage per 10% HP):</b> Starts at +5.0% Damage per 10% Health at Lv 1, scaling +0.5% per level up to +14.5%–15.0% at Lv 20. <b>Melee DMG is UNCAPPED</b>. Synergizes with High Max HP (HP Mogger) and HP Regen (hr).<br>
-          <b>Lora (1 in 5 Attack Boost):</b> Deals boosted damage on every 5th attack: starts at +30% boost at Lv 1 (+6% avg DPS) and scales +10% per level up to +220% boost at Lv 20 (+44% avg DPS). Multiplies critical hits massively, making her the premier choice for <b>Crit Builds</b> (Melee Crit & Ranged Crit).<br>
-          <b>No Fairy (F2P):</b> Classical pure gear progression without fairy investment.</p>
+          <h5 style="color:#2ecc71; margin-top: 10px; font-size: 0.88rem;">Fairies (Lora & Mira, Cap Lvl 20)</h5>
+          <p>
+            <b>Lora:</b> Every 5th attack deals +30% more Damage (+10% per level, up to +220% at Level 20).<br>
+            <b>Mira:</b> Reduces incoming Damage from Critical Hits by 4.5% (+0.5% per level, up to 14.0% at Level 20) for every -4% Skill Cooldown. Total reduction is capped at <b>70%</b>.
+          </p>
 
-          <h5 style="color:#3498db; margin-top: 10px; font-size: 0.88rem;">Target Build Ceilings</h5>
+          <h5 style="color:#3498db; margin-top: 10px; font-size: 0.88rem;">Target Build Godroll Ceilings</h5>
           <ul style="padding-left: 20px; margin-top: 4px; font-size: 0.82rem;">
-            <li><b>Post-Quantum Melee (Tira Mogger) [53.6x Ceiling]:</b> The undisputed 1v1 champion. Stacks 8x HP (+120% HP), 7x Uncapped MD (+490% MD), and 3x HR (132M/s passive regen in 1v1). Reaches 1.1 Billion HP and 214M DPS.</li>
-            <li><b>Post-Quantum Melee (Lora Crit) [75.3x Ceiling]:</b> Old Melee Crit build with full gear CC & CD, uncapped Melee DMG, empowered by Lora's +44% burst DPS.</li>
-            <li><b>Post-Quantum Ranged (Lora Crit) [80.9x Ceiling]:</b> Old Ranged Crit powerhouse leveraging capped 350% RD + 77% Crit Chance + 470% Crit DMG empowered by Lora's +44% burst DPS.</li>
-            <li><b>Post-Quantum Melee (No Fairy) [55.6x Ceiling]:</b> Heavy non-fairy Melee build with uncapped Melee Damage and pure gear stats.</li>
-            <li><b>Post-Quantum Ranged (No Fairy) [22.3x Ceiling]:</b> Classical non-fairy Ranged build with 100% gear Crit Chance and 350% RD cap.</li>
-            <li><b>Pre-Quantum Melee [9.0x]:</b> Early/mid-game melee progression reference.</li>
+            <li><b>Post-Quantum Ranged (Fairy) [31.8x Ceiling]:</b> Target build: 6x Crit Chance, 6x Attack Speed (233.4% breakpoint), 3x Skill Cooldown (21% SCD maxing Mira's 70% anti-crit cap), 2x Lifesteal, 7x Crit Damage.</li>
+            <li><b>Post-Quantum Ranged (No Fairy) [22.3x Ceiling]:</b> Designed for players bypassing the fairy reset. All Crit Chance must be rolled on gear.</li>
+            <li><b>Post-Quantum Melee (Fairy) [58.8x Ceiling]:</b> Target build: 6x Crit Chance, 6x Attack Speed (233.4% breakpoint), 3x Skill Cooldown (21% SCD maxing Mira's 70% anti-crit cap), 2x Lifesteal, 7x Crit Damage.</li>
+            <li><b>Post-Quantum Melee (No Fairy) [52.0x Ceiling]:</b> Heavy Melee build without fairy. Balances 350% Melee DMG with 60% gear CC and 400% Crit DMG.</li>
+            <li><b>Pre-Quantum Melee [9.0x]:</b> Early/mid-game melee reference.</li>
           </ul>
 
           <h5 style="color:#e74c3c; margin-top: 10px; font-size: 0.88rem;">Survival Protocol (Lifesteal)</h5>
@@ -443,13 +450,11 @@
         <button class="btn-close btn-close-modal">✕</button>
       </div>
       <div class="modal-body" style="font-size: 0.85rem; line-height: 1.5; color: #ecf0f1;">
-        <h4 style="color:#e67e22;">Fairies Tira & Lora Update:</h4>
+        <h4 style="color:#e67e22;">Fairies & Target Builds Update:</h4>
         <ul style="padding-left: 20px; margin-top: 4px;">
-          <li><b>Fairies Selector (Tira & Lora):</b> Choose between <b>Tira</b> (HP-to-DMG scaling) and <b>Lora</b> (1 in 5 attack burst, 30% base + 10%/lvl), or <b>None</b>.</li>
-          <li><b>Lora Applied to Crit Builds:</b> Old Melee Crit and Ranged Crit builds now capitalize on Lora's burst (+44% DPS at Lv 20), unlocking <b>75.3x</b> and <b>80.9x</b> ceilings.</li>
-          <li><b>Post-Quantum Melee (Tira Mogger) [53.6x]:</b> HP-scaled melee with uncapped MD, 1.1B HP and 132M/s passive regen.</li>
-          <li><b>Preserved Non-Fairy Builds:</b> Maintained <b>Post-Quantum Melee (No Fairy) [55.6x]</b> and <b>Post-Quantum Ranged (No Fairy) [22.3x]</b> for F2P players.</li>
-          <li><b>1v1 HP & Regen Display:</b> Hero summary displays PvE HP, 1v1 PvP HP (5x), and live passive regen per second.</li>
+          <li><b>Fairy Selection:</b> Choose between <b>Lora</b> (+10%/lvl on 5th hit, max 220% at lvl 20) and <b>Mira</b> (anti-crit reduction +0.5%/lvl per -4% SCD, max 70% at lvl 20). Both capped at lvl 20.</li>
+          <li><b>Target Builds Updated:</b> Fairy Ranged (31.8x) and Fairy Melee (58.8x) target build updated to <b>6 CC, 6 ASPD, 3 SC, 2 LS, 7 CD</b>. Non-fairy builds preserved.</li>
+          <li><b>Rarity Colors Updated:</b> Underworld updated to <code>#3d2a29</code> and Divine updated to <code>#ff8c00</code>.</li>
         </ul>
         <h4 style="color:#3498db; margin-top: 10px;">Mobile & Desktop Responsive Layout Update:</h4>
         <ul style="padding-left: 20px; margin-top: 4px;">
