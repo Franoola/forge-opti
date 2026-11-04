@@ -1,4 +1,4 @@
-
+﻿
 
 const ITEM_RARITIES = {
   "Primitive": { name: "Primitive", color: "#95a5a6", border: "#95a5a6" },
@@ -54,6 +54,94 @@ const BENCHMARKS = {
   "Post-Quantum Melee (No Fairy)": 52.0,
   "Pre-Quantum Melee": 9.0
 };
+
+const TARGET_BUILD_SPECS = {
+  "Post-Quantum Ranged (Fairy)": {
+    name: "Post-Quantum Ranged (Fairy)",
+    weapon: "R",
+    totalSlots: 24,
+    slots: { cc: 6, as: 6, scd: 3, ls: 2, cd: 7 }
+  },
+  "Post-Quantum Melee (Fairy)": {
+    name: "Post-Quantum Melee (Fairy)",
+    weapon: "M",
+    totalSlots: 24,
+    slots: { cc: 6, as: 6, scd: 3, ls: 2, cd: 7 }
+  },
+  "Post-Quantum Ranged (No Fairy)": {
+    name: "Post-Quantum Ranged (No Fairy)",
+    weapon: "R",
+    totalSlots: 24,
+    slots: { cc: 8, as: 6, ls: 2, cd: 8 }
+  },
+  "Post-Quantum Melee (No Fairy)": {
+    name: "Post-Quantum Melee (No Fairy)",
+    weapon: "M",
+    totalSlots: 24,
+    slots: { md: 5, as: 6, cc: 5, ls: 2, cd: 6 }
+  },
+  "Pre-Quantum Melee": {
+    name: "Pre-Quantum Melee",
+    weapon: "M",
+    totalSlots: 24,
+    slots: { md: 6, as: 6, ls: 3, dc: 5, cd: 4 }
+  }
+};
+
+function calculateSlotSaturationMatch(itemsArr, targetBuildName) {
+  const spec = TARGET_BUILD_SPECS[targetBuildName] || TARGET_BUILD_SPECS["Post-Quantum Ranged (Fairy)"];
+  const targetSlots = spec.slots;
+
+  // Extract all substat rolls from items (ignoring base health/damage)
+  const rollsByTag = {};
+  for (let i = 0; i < 12; i++) {
+    const raw = itemsArr[i];
+    if (!raw) continue;
+    const parts = raw.split(",").map(p => p.trim());
+    for (const p of parts) {
+      const m = p.toLowerCase().match(/^([0-9.]+)([a-z]+)$/);
+      if (m) {
+        const val = parseFloat(m[1]);
+        const tag = m[2];
+        if (['h', 'kh', 'mh', 'd', 'kd'].includes(tag)) continue;
+        if (!rollsByTag[tag]) rollsByTag[tag] = [];
+        rollsByTag[tag].push(val);
+      }
+    }
+  }
+
+  let totalSaturated = 0.0;
+  let totalTargetSlots = 0;
+  const breakdown = {};
+
+  for (const tag in targetSlots) {
+    const requiredCount = targetSlots[tag];
+    totalTargetSlots += requiredCount;
+    const maxRoll = MAX_ROLLS[tag] || 1.0;
+
+    // Prioritize highest rolls first
+    const rolls = (rollsByTag[tag] || []).slice().sort((a, b) => b - a);
+    let satSum = 0.0;
+
+    for (let i = 0; i < requiredCount; i++) {
+      if (i < rolls.length) {
+        const sat = Math.min(rolls[i] / maxRoll, 1.0);
+        satSum += sat;
+      }
+    }
+
+    totalSaturated += satSum;
+    breakdown[tag] = {
+      required: requiredCount,
+      filled: Math.min(rolls.length, requiredCount),
+      satSum: satSum,
+      pct: (satSum / requiredCount) * 100.0
+    };
+  }
+
+  const matchPct = totalTargetSlots > 0 ? (totalSaturated / totalTargetSlots) * 100.0 : 0.0;
+  return { matchPct, totalSaturated, totalTargetSlots, breakdown };
+}
 
 function getTargetBenchmark(targetBuild = (appState ? appState.target_build : "Post-Quantum Ranged (Fairy)"), fairyType = (appState ? appState.fairy_type : "Lora"), fairyLvl = (appState ? appState.fairy_lvl : 20)) {
   if (targetBuild && targetBuild.includes("(Fairy)")) {
@@ -545,9 +633,12 @@ function simulateDpsWithItem(slotIdx, testItem) {
     itemQuality = calculateEffectiveQuality(testItem, slotIdx === 5, oldCore.stats, newCore.stats, appState.fairy_lvl, oldCore.weaponType);
   }
 
+  const oldMatchObj = calculateSlotSaturationMatch(appState.items, appState.target_build);
+  const newMatchObj = calculateSlotSaturationMatch(tempBuild, appState.target_build);
+
   return {
-    oldRealDps, oldMult: oldMultObj.dpsMult, oldLs: oldCore.stats.ls, oldRealHps,
-    newRealDps, newMult: newMultObj.dpsMult, newLs: newCore.stats.ls, newRealHps,
+    oldRealDps, oldMult: oldMultObj.dpsMult, oldLs: oldCore.stats.ls, oldRealHps, oldMatchPct: oldMatchObj.matchPct,
+    newRealDps, newMult: newMultObj.dpsMult, newLs: newCore.stats.ls, newRealHps, newMatchPct: newMatchObj.matchPct,
     itemQuality, bestCombo
   };
 }
@@ -603,14 +694,21 @@ function updateUI() {
   const realTotalHp = core.totalHp * (1.0 + (core.stats.hp / 100.0));
   const realHps = (realDps * (core.stats.ls / 100.0)) + (realTotalHp * (core.stats.hr / 100.0));
 
-  const targetMult = getTargetBenchmark(appState.target_build, appState.fairy_type, appState.fairy_lvl);
-  const matchProg = (multObj.dpsMult / targetMult) * 100.0;
+  const matchObj = calculateSlotSaturationMatch(appState.items, appState.target_build);
+  const matchProg = matchObj.matchPct;
 
   // Desktop Hero stats
   document.getElementById('lbl-dps').textContent = `REAL DPS: ${realDps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
   document.getElementById('lbl-hps').textContent = `${realHps.toLocaleString('en-US', { maximumFractionDigits: 1 })}`;
   document.getElementById('lbl-mult').textContent = `${multObj.dpsMult.toFixed(1)}x`;
-  document.getElementById('lbl-match').textContent = `OPTIMAL BUILD MATCH: ${matchProg.toFixed(1)}%`;
+  document.getElementById('lbl-match').textContent = `OPTIMAL BUILD MATCH: ${matchProg.toFixed(1)}% (${matchObj.totalSaturated.toFixed(1)}/24 SLOTS)`;
+
+  const breakdownParts = [];
+  for (const t in matchObj.breakdown) {
+    const b = matchObj.breakdown[t];
+    breakdownParts.push(`${t.toUpperCase()}: ${b.satSum.toFixed(1)}/${b.required}`);
+  }
+  document.getElementById('lbl-match').title = `Saturated target slots: ${breakdownParts.join(" | ")}`;
   document.getElementById('lbl-base-summary').textContent = `BASE DMG: ${core.totalDmg.toLocaleString('en-US', { maximumFractionDigits: 1 })} | TOTAL HP: ${realTotalHp.toLocaleString('en-US', { maximumFractionDigits: 1 })} (+${core.stats.hp.toFixed(1)}%)`;
 
   // Mobile Sticky Header stats
@@ -917,7 +1015,7 @@ function runMarginalSimulation() {
         Eff. Mult: ${res.newMult.toFixed(2)}x (was ${res.oldMult.toFixed(2)}x) | HPS: ${res.newRealHps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | LS: ${res.newLs.toFixed(1)}%
       </div>
       <div style="font-size:13px; color:#3498db; margin-top:2px;">
-        Item Quality Score: ${res.itemQuality.toFixed(1)}%
+        Item Quality Score: ${res.itemQuality.toFixed(1)}% | Build Match: ${res.newMatchPct.toFixed(1)}% (was ${res.oldMatchPct.toFixed(1)}%)
       </div>
       ${petReopt}
       ${lsWarning}
@@ -1012,13 +1110,12 @@ function runSimulationWithStorage() {
   if (currentCalibrationSlot === 8) {
     candidateMounts = [testItemStr];
   } else {
-    const mSet = new Set();
-    if (tempBuild[8]) mSet.add(tempBuild[8]);
-    for (const m of appState.mount_storage) {
-      if (m) mSet.add(m);
+    const storageMounts = appState.mount_storage.filter(Boolean);
+    if (storageMounts.length > 0) {
+      candidateMounts = storageMounts;
+    } else {
+      candidateMounts = [tempBuild[8] || ""];
     }
-    candidateMounts = Array.from(mSet);
-    if (candidateMounts.length === 0) candidateMounts = [tempBuild[8] || ""];
   }
 
   // 4. Optimization tracking: Safe (LS >= 30%) and Risk (LS < 30%)
@@ -1033,6 +1130,7 @@ function runSimulationWithStorage() {
     const hps = (d * (c.stats.ls / 100.0)) + (h * (c.stats.hr / 100.0));
     const score = calculateBuildScore(d, h, hps, mObj.critReduction);
     const ls = c.stats.ls;
+    const matchObj = calculateSlotSaturationMatch(buildArr, appState.target_build);
 
     const cand = {
       combo: [...combo],
@@ -1041,7 +1139,8 @@ function runSimulationWithStorage() {
       mult: mObj.dpsMult,
       hp: h,
       hps,
-      ls
+      ls,
+      matchPct: matchObj.matchPct
     };
 
     if (ls >= 30.0) {
@@ -1062,14 +1161,17 @@ function runSimulationWithStorage() {
 
   // Evaluate storage combinations
   if (currentCalibrationSlot >= 9) {
-    const otherCandidatePets = [];
-    for (let pIdx = 9; pIdx <= 11; pIdx++) {
-      if (pIdx !== currentCalibrationSlot && tempBuild[pIdx]) {
-        otherCandidatePets.push(tempBuild[pIdx]);
+    let otherCandidatePets = appState.pet_storage.filter(Boolean);
+    if (otherCandidatePets.length < 2) {
+      otherCandidatePets = [];
+      for (let pIdx = 9; pIdx <= 11; pIdx++) {
+        if (pIdx !== currentCalibrationSlot && tempBuild[pIdx]) {
+          otherCandidatePets.push(tempBuild[pIdx]);
+        }
       }
-    }
-    for (const sp of appState.pet_storage) {
-      if (sp) otherCandidatePets.push(sp);
+      for (const sp of appState.pet_storage.filter(Boolean)) {
+        if (!otherCandidatePets.includes(sp)) otherCandidatePets.push(sp);
+      }
     }
 
     const petCombos = otherCandidatePets.length >= 2 ? combinations(otherCandidatePets, 2) : [];
@@ -1090,12 +1192,15 @@ function runSimulationWithStorage() {
       }
     }
   } else {
-    const candidatePetPool = [];
-    for (let pIdx = 9; pIdx <= 11; pIdx++) {
-      if (tempBuild[pIdx]) candidatePetPool.push(tempBuild[pIdx]);
-    }
-    for (const sp of appState.pet_storage) {
-      if (sp) candidatePetPool.push(sp);
+    let candidatePetPool = appState.pet_storage.filter(Boolean);
+    if (candidatePetPool.length < 3) {
+      candidatePetPool = [];
+      for (let pIdx = 9; pIdx <= 11; pIdx++) {
+        if (tempBuild[pIdx]) candidatePetPool.push(tempBuild[pIdx]);
+      }
+      for (const sp of appState.pet_storage.filter(Boolean)) {
+        if (!candidatePetPool.includes(sp)) candidatePetPool.push(sp);
+      }
     }
 
     const petCombos = candidatePetPool.length >= 3 ? combinations(candidatePetPool, 3) : [];
@@ -1119,7 +1224,7 @@ function runSimulationWithStorage() {
 
   // 5. Verdict and Results
   const container = document.getElementById('sim-swap-result');
-  const targetMult = getTargetBenchmark(appState.target_build, appState.fairy_type, appState.fairy_lvl);
+  // Target benchmark replaced by slot saturation calculation
 
   const hasHigherDpsRisk = (bestRisk !== null) && 
     (bestSafe === null || bestRisk.dps > bestSafe.dps * 1.0001);
@@ -1130,7 +1235,7 @@ function runSimulationWithStorage() {
     const safeHpsDiff = currHps > 0 ? ((bestSafe.hps / currHps) - 1.0) * 100.0 : 0.0;
     const safeDpsSign = safeDpsDiff >= 0 ? "+" : "";
     const safeHpsSign = safeHpsDiff >= 0 ? "+" : "";
-    const safeMatchProg = (bestSafe.mult / targetMult) * 100.0;
+    const safeMatchProg = bestSafe.matchPct;
     const safeSwapsHtml = generateBuildSwapsHtml(bestSafe.combo, currentCalibrationSlot);
 
     const riskDpsDiff = currDps > 0 ? ((bestRisk.dps / currDps) - 1.0) * 100.0 : 0.0;
@@ -1138,7 +1243,7 @@ function runSimulationWithStorage() {
     const riskDpsSign = riskDpsDiff >= 0 ? "+" : "";
     const riskHpsSign = riskHpsDiff >= 0 ? "+" : "";
     const riskAdvantage = ((bestRisk.dps / bestSafe.dps) - 1.0) * 100.0;
-    const riskMatchProg = (bestRisk.mult / targetMult) * 100.0;
+    const riskMatchProg = bestRisk.matchPct;
     const riskSwapsHtml = generateBuildSwapsHtml(bestRisk.combo, currentCalibrationSlot);
 
     container.innerHTML = `
@@ -1206,7 +1311,7 @@ function runSimulationWithStorage() {
     const hpsDiff = currHps > 0 ? ((bestSafe.hps / currHps) - 1.0) * 100.0 : 0.0;
     const dpsSign = dpsDiff >= 0 ? "+" : "";
     const hpsSign = hpsDiff >= 0 ? "+" : "";
-    const newMatchProg = (bestSafe.mult / targetMult) * 100.0;
+    const newMatchProg = bestSafe.matchPct;
     const isUpgrade = (bestSafe.score > currScore && bestSafe.dps >= currDps * 0.98);
     const swapsHtml = generateBuildSwapsHtml(bestSafe.combo, currentCalibrationSlot);
 
@@ -1260,7 +1365,7 @@ function runSimulationWithStorage() {
     const hpsDiff = currHps > 0 ? ((bestRisk.hps / currHps) - 1.0) * 100.0 : 0.0;
     const dpsSign = dpsDiff >= 0 ? "+" : "";
     const hpsSign = hpsDiff >= 0 ? "+" : "";
-    const newMatchProg = (bestRisk.mult / targetMult) * 100.0;
+    const newMatchProg = bestRisk.matchPct;
     const isViable = (bestRisk.dps >= currDps * 0.98);
     const swapsHtml = generateBuildSwapsHtml(bestRisk.combo, currentCalibrationSlot);
 
@@ -1461,24 +1566,15 @@ function saveStorageItem() {
 }
 
 function runStorageOptimization() {
-  const mounts = [...appState.mount_storage];
-  if (appState.items[8] && !mounts.includes(appState.items[8])) {
-    mounts.push(appState.items[8]);
-  }
-
-  const pets = [...appState.pet_storage];
-  for (let pIdx = 9; pIdx <= 11; pIdx++) {
-    if (appState.items[pIdx] && !pets.includes(appState.items[pIdx])) {
-      pets.push(appState.items[pIdx]);
-    }
-  }
+  const mounts = appState.mount_storage.filter(Boolean);
+  const pets = appState.pet_storage.filter(Boolean);
 
   const resLbl = document.getElementById('opti-result-lbl');
   const btnApply = document.getElementById('btn-apply-opti');
   const btnApplyRisk = document.getElementById('btn-apply-risk-opti');
 
   if (mounts.length === 0 || pets.length < 3) {
-    resLbl.innerHTML = `<span style="color:#dc3545;">ERROR: You need at least 1 Mount and 3 Pets (equipped or in storage)!</span>`;
+    resLbl.innerHTML = `<span style="color:#dc3545;">ERROR: You need at least 1 Mount and 3 Pets in Storage!</span>`;
     btnApply.disabled = true;
     if (btnApplyRisk) btnApplyRisk.classList.add('hidden');
     return;
@@ -1518,7 +1614,8 @@ function runStorageOptimization() {
         mult: mObj.dpsMult,
         hp,
         hps,
-        ls
+        ls,
+        matchPct: calculateSlotSaturationMatch(tempBuild, appState.target_build).matchPct
       };
 
       if (ls >= 30.0) {
@@ -1553,7 +1650,7 @@ function runStorageOptimization() {
             <span style="font-weight:700; color:#ecf0f1; font-size:13px;">${safeDpsDiff >= 0 ? '+' : ''}${safeDpsDiff.toFixed(1)}% DPS</span>
           </div>
           <div style="font-size:12px; color:#bdc3c7; line-height:1.5;">
-            <div><b>DPS:</b> ${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>HPS:</b> ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>LS:</b> ${bestSafe.ls.toFixed(1)}% | <b>Mult:</b> ${bestSafe.mult.toFixed(2)}x</div>
+            <div><b>DPS:</b> ${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>HPS:</b> ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>LS:</b> ${bestSafe.ls.toFixed(1)}% | <b>Mult:</b> ${bestSafe.mult.toFixed(2)}x | <b>Match:</b> ${bestSafe.matchPct.toFixed(1)}%</div>
             <div style="margin-top:4px;"><b>Mount:</b> ${formatItemSummary(bestSafe.combo[0])}</div>
             <div><b>Pets:</b> ${bestSafe.combo.slice(1).map(formatItemSummary).join(' | ')}</div>
           </div>
@@ -1568,7 +1665,7 @@ function runStorageOptimization() {
           </div>
           <div class="risk-warning-banner" style="margin:4px 0 8px 0; padding:6px;">⚠️ LIFESTEAL BELOW 30% TAKE AT OWN RISK (${bestRisk.ls.toFixed(1)}%)</div>
           <div style="font-size:12px; color:#bdc3c7; line-height:1.5;">
-            <div><b>DPS:</b> ${bestRisk.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${riskDpsDiff >= 0 ? '+' : ''}${riskDpsDiff.toFixed(1)}% vs Current) | <b>HPS:</b> ${bestRisk.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>LS:</b> ${bestRisk.ls.toFixed(1)}%</div>
+            <div><b>DPS:</b> ${bestRisk.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${riskDpsDiff >= 0 ? '+' : ''}${riskDpsDiff.toFixed(1)}% vs Current) | <b>HPS:</b> ${bestRisk.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>LS:</b> ${bestRisk.ls.toFixed(1)}% | <b>Match:</b> ${bestRisk.matchPct.toFixed(1)}%</div>
             <div style="margin-top:4px;"><b>Mount:</b> ${formatItemSummary(bestRisk.combo[0])}</div>
             <div><b>Pets:</b> ${bestRisk.combo.slice(1).map(formatItemSummary).join(' | ')}</div>
           </div>
@@ -1601,7 +1698,7 @@ function runStorageOptimization() {
       resLbl.innerHTML = `
         <div style="color:#28a745; font-weight:bold; font-size:15px;">FOUND BETTER ALL-AROUND COMBINATION!</div>
         <div style="margin-top:4px; color:#ecf0f1;">
-          Best DPS: <b>${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })}</b> (${sign}${dpsDiff.toFixed(1)}%) | HPS: ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | LS: ${bestSafe.ls.toFixed(1)}% | Mult: ${bestSafe.mult.toFixed(2)}x
+          Best DPS: <b>${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })}</b> (${sign}${dpsDiff.toFixed(1)}%) | HPS: ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | LS: ${bestSafe.ls.toFixed(1)}% | Mult: ${bestSafe.mult.toFixed(2)}x | Match: ${bestSafe.matchPct.toFixed(1)}%
         </div>
         <div style="font-size:12px; color:#bdc3c7; margin-top:2px;">
           Current DPS: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | Mult: ${currMultObj.dpsMult.toFixed(2)}x
