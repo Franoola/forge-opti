@@ -1638,43 +1638,54 @@ function runStorageOptimization() {
     activeRiskStorageCombo = bestRisk.combo;
 
     const safeDpsDiff = currDps > 0 ? ((bestSafe.dps / currDps) - 1.0) * 100.0 : 0.0;
+    const safeHpsDiff = currHps > 0 ? ((bestSafe.hps / currHps) - 1.0) * 100.0 : 0.0;
+    const safeDpsSign = safeDpsDiff >= 0 ? "+" : "";
+    const safeHpsSign = safeHpsDiff >= 0 ? "+" : "";
+    const safeSwapsHtml = generateBuildSwapsHtml(bestSafe.combo);
+
     const riskDpsDiff = currDps > 0 ? ((bestRisk.dps / currDps) - 1.0) * 100.0 : 0.0;
+    const riskHpsDiff = currHps > 0 ? ((bestRisk.hps / currHps) - 1.0) * 100.0 : 0.0;
+    const riskDpsSign = riskDpsDiff >= 0 ? "+" : "";
+    const riskHpsSign = riskHpsDiff >= 0 ? "+" : "";
     const riskAdvantage = ((bestRisk.dps / bestSafe.dps) - 1.0) * 100.0;
+    const riskSwapsHtml = generateBuildSwapsHtml(bestRisk.combo);
 
     resLbl.innerHTML = `
-      <div style="display:flex; flex-direction:column; gap:12px; text-align:left;">
-        <!-- Safe Build Card -->
-        <div style="background:#1a252f; border:1px solid #2ecc71; border-radius:8px; padding:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:6px; margin-bottom:6px;">
-            <span style="color:#2ecc71; font-weight:800; font-size:14px;">🛡️ OPTION A: SAFE LOADOUT (LS ≥ 30%)</span>
-            <span style="font-weight:700; color:#ecf0f1; font-size:13px;">${safeDpsDiff >= 0 ? '+' : ''}${safeDpsDiff.toFixed(1)}% DPS</span>
+      <div class="dual-results-container">
+        <!-- Option A: Safe Build -->
+        <div class="sim-verdict-card verdict-take">
+          <div class="verdict-header">
+            <span class="verdict-badge take">\uD83D\uDEE1\uFE0F OPTION A: SAFE LOADOUT (LS \u2265 30%)</span>
+            <span class="verdict-diff">${safeDpsSign}${safeDpsDiff.toFixed(1)}% DPS</span>
           </div>
-          <div style="font-size:12px; color:#bdc3c7; line-height:1.5;">
-            <div><b>DPS:</b> ${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>HPS:</b> ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>LS:</b> ${bestSafe.ls.toFixed(1)}% | <b>Mult:</b> ${bestSafe.mult.toFixed(2)}x | <b>Match:</b> ${bestSafe.matchPct.toFixed(1)}%</div>
-            <div style="margin-top:4px;"><b>Mount:</b> ${formatItemSummary(bestSafe.combo[0])}</div>
-            <div><b>Pets:</b> ${bestSafe.combo.slice(1).map(formatItemSummary).join(' | ')}</div>
+          <div class="verdict-stats">
+            <div><strong>New Real DPS:</strong> ${bestSafe.dps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (Current: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
+            <div><strong>Multiplier:</strong> ${bestSafe.mult.toFixed(2)}x | <strong>HPS:</strong> ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${safeHpsSign}${safeHpsDiff.toFixed(1)}%) | <strong>LS:</strong> ${bestSafe.ls.toFixed(1)}%</div>
+            <div><strong>Optimal Build Match:</strong> ${bestSafe.matchPct.toFixed(1)}%</div>
           </div>
-          <button id="btn-opti-card-safe" class="btn-primary" style="margin-top:8px; width:100%; padding:7px; font-size:13px;">⚡ Apply Safe Loadout</button>
+          ${safeSwapsHtml}
+          <button id="btn-opti-card-safe" class="btn-primary btn-apply-all">\u26A1 Apply Safe Loadout (LS \u2265 30%)</button>
         </div>
 
-        <!-- Glass-Cannon Card -->
-        <div style="background:#241915; border:1px solid #e67e22; border-radius:8px; padding:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:6px; margin-bottom:6px;">
-            <span style="color:#e67e22; font-weight:800; font-size:14px;">🔥 OPTION B: MAX DPS (GLASS CANNON)</span>
-            <span style="font-weight:700; color:#f39c12; font-size:13px;">+${riskAdvantage.toFixed(1)}% vs Safe</span>
+        <!-- Option B: Glass-Cannon Build -->
+        <div class="sim-verdict-card verdict-risk">
+          <div class="verdict-header">
+            <span class="verdict-badge risk">\uD83D\uDD25 OPTION B: MAX DPS (GLASS CANNON)</span>
+            <span class="verdict-diff" style="color:#e67e22;">+${riskAdvantage.toFixed(1)}% vs Safe</span>
           </div>
-          <div class="risk-warning-banner" style="margin:4px 0 8px 0; padding:6px;">⚠️ LIFESTEAL BELOW 30% TAKE AT OWN RISK (${bestRisk.ls.toFixed(1)}%)</div>
-          <div style="font-size:12px; color:#bdc3c7; line-height:1.5;">
-            <div><b>DPS:</b> ${bestRisk.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${riskDpsDiff >= 0 ? '+' : ''}${riskDpsDiff.toFixed(1)}% vs Current) | <b>HPS:</b> ${bestRisk.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>LS:</b> ${bestRisk.ls.toFixed(1)}% | <b>Match:</b> ${bestRisk.matchPct.toFixed(1)}%</div>
-            <div style="margin-top:4px;"><b>Mount:</b> ${formatItemSummary(bestRisk.combo[0])}</div>
-            <div><b>Pets:</b> ${bestRisk.combo.slice(1).map(formatItemSummary).join(' | ')}</div>
+          <div class="risk-warning-banner">\u26A0\uFE0F LIFESTEAL BELOW 30% TAKE AT OWN RISK (${bestRisk.ls.toFixed(1)}%)</div>
+          <div class="verdict-stats">
+            <div><strong>New Real DPS:</strong> ${bestRisk.dps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (${riskDpsSign}${riskDpsDiff.toFixed(1)}% vs Current)</div>
+            <div><strong>Multiplier:</strong> ${bestRisk.mult.toFixed(2)}x | <strong>HPS:</strong> ${bestRisk.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${riskHpsSign}${riskHpsDiff.toFixed(1)}%) | <strong>LS:</strong> ${bestRisk.ls.toFixed(1)}%</div>
+            <div><strong>Optimal Build Match:</strong> ${bestRisk.matchPct.toFixed(1)}%</div>
           </div>
-          <button id="btn-opti-card-risk" class="btn-glass-cannon" style="margin-top:8px; width:100%; padding:7px; font-size:13px;">🔥 Apply Glass-Cannon Loadout</button>
+          ${riskSwapsHtml}
+          <button id="btn-opti-card-risk" class="btn-glass-cannon btn-apply-all">\uD83D\uDD25 Apply Glass-Cannon Loadout (LS &lt; 30%)</button>
         </div>
       </div>
     `;
 
-    btnApply.textContent = "⚡ Apply Safe Loadout";
+    btnApply.textContent = "\u26A1 Apply Safe Loadout";
     btnApply.disabled = false;
     if (btnApplyRisk) {
       btnApplyRisk.classList.remove('hidden');
@@ -1692,38 +1703,46 @@ function runStorageOptimization() {
     activeStorageCombo = bestSafe.combo;
     activeRiskStorageCombo = null;
 
-    if (bestSafe.score > currScore && (bestSafe.dps >= currDps * 0.98)) {
-      const dpsDiff = ((bestSafe.dps / currDps) - 1.0) * 100.0;
-      const sign = dpsDiff >= 0 ? "+" : "";
+    const dpsDiff = currDps > 0 ? ((bestSafe.dps / currDps) - 1.0) * 100.0 : 0.0;
+    const hpsDiff = currHps > 0 ? ((bestSafe.hps / currHps) - 1.0) * 100.0 : 0.0;
+    const dpsSign = dpsDiff >= 0 ? "+" : "";
+    const hpsSign = hpsDiff >= 0 ? "+" : "";
+    const safeSwapsHtml = generateBuildSwapsHtml(bestSafe.combo);
+    const isUpgrade = (bestSafe.score > currScore && bestSafe.dps >= currDps * 0.98);
+
+    if (isUpgrade) {
       resLbl.innerHTML = `
-        <div style="color:#28a745; font-weight:bold; font-size:15px;">FOUND BETTER ALL-AROUND COMBINATION!</div>
-        <div style="margin-top:4px; color:#ecf0f1;">
-          Best DPS: <b>${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })}</b> (${sign}${dpsDiff.toFixed(1)}%) | HPS: ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | LS: ${bestSafe.ls.toFixed(1)}% | Mult: ${bestSafe.mult.toFixed(2)}x | Match: ${bestSafe.matchPct.toFixed(1)}%
-        </div>
-        <div style="font-size:12px; color:#bdc3c7; margin-top:2px;">
-          Current DPS: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | Mult: ${currMultObj.dpsMult.toFixed(2)}x
+        <div class="sim-verdict-card verdict-take">
+          <div class="verdict-header">
+            <span class="verdict-badge take">\uD83D\uDEE1\uFE0F FOUND BETTER STORAGE LOADOUT!</span>
+            <span class="verdict-diff">${dpsSign}${dpsDiff.toFixed(1)}% DPS</span>
+          </div>
+          <div class="verdict-stats">
+            <div><strong>New Real DPS:</strong> ${bestSafe.dps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (Current: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })})</div>
+            <div><strong>Multiplier:</strong> ${bestSafe.mult.toFixed(2)}x | <strong>HPS:</strong> ${bestSafe.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${hpsSign}${hpsDiff.toFixed(1)}%) | <strong>LS:</strong> ${bestSafe.ls.toFixed(1)}%</div>
+            <div><strong>Optimal Build Match:</strong> ${bestSafe.matchPct.toFixed(1)}%</div>
+          </div>
+          ${safeSwapsHtml}
+          <button id="btn-opti-card-safe" class="btn-primary btn-apply-all">\u26A1 Apply to Build</button>
         </div>
       `;
       btnApply.textContent = "Apply to Build";
       btnApply.disabled = false;
-    } else if (Math.abs(bestSafe.score - currScore) / (currScore + 1e-6) < 0.005 || (bestSafe.dps <= currDps && bestSafe.score <= currScore)) {
-      activeStorageCombo = null;
-      resLbl.innerHTML = `
-        <div style="color:#f39c12; font-weight:bold; font-size:15px;">CURRENT BUILD IS ALREADY OPTIMAL!</div>
-        <div style="margin-top:4px; color:#ecf0f1;">
-          Current DPS: <b>${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })}</b> | Mult: ${currMultObj.dpsMult.toFixed(2)}x
-        </div>
-        <div style="font-size:12px; color:#bdc3c7; margin-top:2px;">
-          Storage pets cannot beat your equipped all-around stats.
-        </div>
-      `;
-      btnApply.disabled = true;
+      document.getElementById('btn-opti-card-safe').addEventListener('click', applyOptimizedCombo);
     } else {
       activeStorageCombo = null;
       resLbl.innerHTML = `
-        <div style="color:#dc3545; font-weight:bold; font-size:15px;">STORAGE IS WEAKER THAN CURRENT BUILD!</div>
-        <div style="margin-top:4px; color:#ecf0f1;">
-          Best storage DPS: ${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (Current: ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })}) | Mult: ${bestSafe.mult.toFixed(2)}x
+        <div class="sim-verdict-card verdict-neutral">
+          <div class="verdict-header">
+            <span class="verdict-badge" style="color:#f39c12;">\u2728 CURRENT LOADOUT IS ALREADY OPTIMAL</span>
+            <span class="verdict-diff">${dpsSign}${dpsDiff.toFixed(1)}% DPS</span>
+          </div>
+          <div class="verdict-stats">
+            <div><strong>Current DPS:</strong> ${currDps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <strong>Mult:</strong> ${currMultObj.dpsMult.toFixed(2)}x | <strong>LS:</strong> ${currCore.stats.ls.toFixed(1)}%</div>
+            <div><strong>Best Storage DPS:</strong> ${bestSafe.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <strong>Match:</strong> ${bestSafe.matchPct.toFixed(1)}%</div>
+            <div>Storage pets & mount cannot beat your currently equipped loadout.</div>
+          </div>
+          ${safeSwapsHtml}
         </div>
       `;
       btnApply.disabled = true;
@@ -1736,17 +1755,25 @@ function runStorageOptimization() {
     activeStorageCombo = null;
     activeRiskStorageCombo = bestRisk.combo;
     const riskDpsDiff = currDps > 0 ? ((bestRisk.dps / currDps) - 1.0) * 100.0 : 0.0;
+    const riskHpsDiff = currHps > 0 ? ((bestRisk.hps / currHps) - 1.0) * 100.0 : 0.0;
+    const riskDpsSign = riskDpsDiff >= 0 ? "+" : "";
+    const riskHpsSign = riskHpsDiff >= 0 ? "+" : "";
+    const riskSwapsHtml = generateBuildSwapsHtml(bestRisk.combo);
 
     resLbl.innerHTML = `
-      <div style="background:#241915; border:1px solid #e67e22; border-radius:8px; padding:12px; text-align:left;">
-        <div style="color:#e67e22; font-weight:800; font-size:14px; margin-bottom:6px;">⚠️ NO COMBO REACHES 30% LS — BEST DPS LOADOUT:</div>
-        <div class="risk-warning-banner" style="margin:4px 0 8px 0; padding:6px;">⚠️ LIFESTEAL BELOW 30% TAKE AT OWN RISK (${bestRisk.ls.toFixed(1)}%)</div>
-        <div style="font-size:12px; color:#bdc3c7; line-height:1.5;">
-          <div><b>DPS:</b> ${bestRisk.dps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${riskDpsDiff >= 0 ? '+' : ''}${riskDpsDiff.toFixed(1)}% vs Current) | <b>HPS:</b> ${bestRisk.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} | <b>LS:</b> ${bestRisk.ls.toFixed(1)}%</div>
-          <div style="margin-top:4px;"><b>Mount:</b> ${formatItemSummary(bestRisk.combo[0])}</div>
-          <div><b>Pets:</b> ${bestRisk.combo.slice(1).map(formatItemSummary).join(' | ')}</div>
+      <div class="sim-verdict-card verdict-risk">
+        <div class="verdict-header">
+          <span class="verdict-badge risk">\u26A0\uFE0F NO COMBO REACHES 30% LS â€” BEST DPS LOADOUT</span>
+          <span class="verdict-diff">${riskDpsSign}${riskDpsDiff.toFixed(1)}% DPS</span>
         </div>
-        <button id="btn-opti-card-risk" class="btn-glass-cannon" style="margin-top:8px; width:100%; padding:7px; font-size:13px;">🔥 Apply Glass-Cannon Loadout</button>
+        <div class="risk-warning-banner">\u26A0\uFE0F LIFESTEAL BELOW 30% TAKE AT OWN RISK (${bestRisk.ls.toFixed(1)}%)</div>
+        <div class="verdict-stats">
+          <div><strong>New Real DPS:</strong> ${bestRisk.dps.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} (${riskDpsSign}${riskDpsDiff.toFixed(1)}% vs Current)</div>
+          <div><strong>Multiplier:</strong> ${bestRisk.mult.toFixed(2)}x | <strong>HPS:</strong> ${bestRisk.hps.toLocaleString('en-US', { maximumFractionDigits: 1 })} (${riskHpsSign}${riskHpsDiff.toFixed(1)}%) | <strong>LS:</strong> ${bestRisk.ls.toFixed(1)}%</div>
+          <div><strong>Optimal Build Match:</strong> ${bestRisk.matchPct.toFixed(1)}%</div>
+        </div>
+        ${riskSwapsHtml}
+        <button id="btn-opti-card-risk" class="btn-glass-cannon btn-apply-all">\uD83D\uDD25 Apply Glass-Cannon Loadout</button>
       </div>
     `;
 

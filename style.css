@@ -753,6 +753,7 @@ select:focus, input:focus, textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  text-align: left;
   animation: fadeIn 0.25s ease-out;
 }
 
